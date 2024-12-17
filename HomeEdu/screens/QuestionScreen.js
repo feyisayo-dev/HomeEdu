@@ -6,6 +6,7 @@ import { useUser } from '../context/UserContext';
 
 const QuestionScreen = ({ route, navigation }) => {
     const { userData } = useUser();
+    const [narrations, setNarrations] = useState({});
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userAnswers, setUserAnswers] = useState({});
@@ -54,41 +55,53 @@ const QuestionScreen = ({ route, navigation }) => {
             acc[question.QuestionId] = question.answer;
             return acc;
         }, {});
-    
+
         const score = Object.keys(userAnswers).reduce((acc, questionId) => {
             if (userAnswers[questionId] === correctAnswers[questionId]) {
                 acc++;
             }
             return acc;
         }, 0);
-    
+
         setResults({
             total: questions.length,
             correct: score,
         });
-    
+
+        // Update streaks
         try {
-            const username = userData.username; // Get from your auth state/context
-            const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/streaks/update`, {
+            const username = userData.username;
+            await fetch(`https://homeedu.fsdgroup.com.ng/api/streaks/update`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username }),
             });
-    
-            const data = await response.json();
-    
-            if (response.ok) {
-                console.log(`Streak updated successfully. Current streak: ${data.streak_count}`);
-            } else {
-                console.error(`Error updating streak: ${data.error}`);
-            }
         } catch (error) {
             console.error('Error updating streak:', error);
         }
+
+        // Fetch narrations for each question
+        const newNarrations = {};
+        for (const question of questions) {
+            try {
+                const response = await fetch(
+                    `https://homeedu.fsdgroup.com.ng/api/narration/${question.QuestionId}`
+                );
+                const data = await response.json();
+                if (response.ok) {
+                    newNarrations[question.QuestionId] = data.narration || 'No narration available';
+                } else {
+                    newNarrations[question.QuestionId] = 'Failed to fetch narration';
+                }
+            } catch (error) {
+                console.error(`Error fetching narration for question ${question.QuestionId}:`, error);
+                newNarrations[question.QuestionId] = 'Error fetching narration';
+            }
+        }
+        setNarrations(newNarrations);
     };
-    
+
+
 
     if (loading) {
         return (
@@ -104,11 +117,18 @@ const QuestionScreen = ({ route, navigation }) => {
             <Text style={styles.title}>Questions for Subtopic: {subtopic}</Text>
             {questions.length > 0 ? (
                 questions.map((question, index) => (
-                    <QuestionRenderer
-                        key={index}
-                        question={question}
-                        onAnswerSelected={handleAnswerSelected}
-                    />
+                    <View key={index} style={styles.questionContainer}>
+                        <QuestionRenderer
+                            question={question}
+                            onAnswerSelected={handleAnswerSelected}
+                        />
+                        {/* Display narration if available */}
+                        {narrations[question.QuestionId] && (
+                            <Text style={styles.narrationText}>
+                                Narration: {narrations[question.QuestionId]}
+                            </Text>
+                        )}
+                    </View>
                 ))
             ) : (
                 <Text>No questions available.</Text>
@@ -120,12 +140,15 @@ const QuestionScreen = ({ route, navigation }) => {
                 </Text>
             )}
         </ScrollView>
+
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 16, backgroundColor: '#fff' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+    questionContainer: { marginBottom: 16 },
+    narrationText: { marginTop: 8, fontStyle: 'italic', color: '#555' },
 });
 
 export default QuestionScreen;
