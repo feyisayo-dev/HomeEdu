@@ -3,18 +3,27 @@ import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { RadioButton } from 'react-native-paper';
 
 const QuestionRenderer = ({ question, onAnswerSelected }) => {
-    const [selectedOption, setSelectedOption] = useState(null); // Track selected option
+    const [selectedOption, setSelectedOption] = useState(null);
 
     const handleSelection = (value) => {
         setSelectedOption(value);
         onAnswerSelected(question.QuestionId, value); // Pass the selected answer back
     };
 
+    // Determine border color based on question status (answered, correct/incorrect)
+    const borderColor = question.isCorrect === undefined
+        ? '#ddd' // Default border color (when not answered)
+        : question.isCorrect === null
+        ? '#ddd' // Neutral color if the answer is not yet checked
+        : question.isCorrect
+        ? 'green' // Correct answer
+        : 'red'; // Incorrect answer
+
     switch (question.type) {
         case 'objective':
         case 'true-false':
             return (
-                <View style={styles.container}>
+                <View style={[styles.container, { borderColor }]}>
                     <Text style={styles.questionText}>{question.content}</Text>
                     <RadioButton.Group
                         onValueChange={handleSelection}
@@ -32,7 +41,7 @@ const QuestionRenderer = ({ question, onAnswerSelected }) => {
 
         case 'theory':
             return (
-                <View style={styles.container}>
+                <View style={[styles.container, { borderColor }]}>
                     <Text style={styles.questionText}>{question.content}</Text>
                     <TextInput
                         style={styles.textArea}
@@ -48,7 +57,7 @@ const QuestionRenderer = ({ question, onAnswerSelected }) => {
 
         case 'fill-in-the-gaps':
             return (
-                <View style={styles.container}>
+                <View style={[styles.container, { borderColor }]}>
                     <Text style={styles.questionText}>{question.content}</Text>
                     <TextInput
                         style={styles.input}
@@ -68,6 +77,7 @@ const QuestionRenderer = ({ question, onAnswerSelected }) => {
             );
     }
 };
+
 
 const styles = StyleSheet.create({
     container: {

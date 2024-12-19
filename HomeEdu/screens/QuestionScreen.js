@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, ActivityIndicator, Button } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, ActivityIndicator, Button, Alert } from 'react-native';
 import axios from 'axios';
 import QuestionRenderer from '../renderer/QuestionRenderer';
 import { useUser } from '../context/UserContext';
 import { Video } from 'expo-av';
 
 const QuestionScreen = ({ route, navigation }) => {
+    const [currentIndex, setCurrentIndex] = useState(0); // Track the current question index
     const { userData } = useUser();
     const [narrations, setNarrations] = useState({});
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userAnswers, setUserAnswers] = useState({});
     const [results, setResults] = useState(null); // Track results
+    const [showNarrations, setShowNarrations] = useState(false); // Show narrations toggle
 
     const { subtopicId, subtopic } = route.params;
 
@@ -46,30 +48,34 @@ const QuestionScreen = ({ route, navigation }) => {
     }, [userData]);
 
     const handleAnswerSelected = (questionId, answer) => {
-        setUserAnswers((prev) => ({
-            ...prev,
+        setUserAnswers((prevAnswers) => ({
+            ...prevAnswers,
             [questionId]: answer,
         }));
     };
+
     const handleSubmit = async () => {
-        const correctAnswers = questions.reduce((acc, question) => {
-            acc[question.QuestionId] = question.answer;
-            return acc;
-        }, {});
+        const selectedAnswer = userAnswers[questions[currentIndex].QuestionId];
 
-        const score = Object.keys(userAnswers).reduce((acc, questionId) => {
-            if (userAnswers[questionId] === correctAnswers[questionId]) {
-                acc++;
-            }
-            return acc;
-        }, 0);
+        // Log the selected answer for debugging
+        console.log('Selected Answer for Question:', questions[currentIndex].QuestionId);
+        console.log('Answer:', selectedAnswer);
 
-        setResults({
-            total: questions.length,
-            correct: score,
-        });
+        if (!selectedAnswer) {
+            Alert.alert('Answer Required', 'Please select an answer before submitting.');
+            return;
+        }
 
-        // Update streaks
+        setShowNarrations(true); // Show narrations after submitting the answer
+
+        const isCorrect = selectedAnswer === questions[currentIndex].answer;
+
+        const updatedQuestions = [...questions];
+        updatedQuestions[currentIndex] = {
+            ...questions[currentIndex],
+            isCorrect,
+        };
+        setQuestions(updatedQuestions);
         try {
             const username = userData.username;
             await fetch(`https://homeedu.fsdgroup.com.ng/api/streaks/update`, {
@@ -80,57 +86,66 @@ const QuestionScreen = ({ route, navigation }) => {
         } catch (error) {
             console.error('Error updating streak:', error);
         }
+        // Fetch narrations (existing logic)
+        try {
+            const questionId = questions[currentIndex].QuestionId;
+            const response = await fetch(
+                `https://homeedu.fsdgroup.com.ng/api/narration/${questionId}`
+            );
+            const data = await response.json();
 
-        // Fetch narrations for each question
-        const newNarrations = {};
-        for (const question of questions) {
-            try {
-                const response = await fetch(
-                    `https://homeedu.fsdgroup.com.ng/api/narration/${question.QuestionId}`
-                );
-                const data = await response.json();
-
-                if (response.ok && data.data && data.data.length > 0) {
-                    const narrationContent = JSON.parse(data.data[0].Content); // Access the first item in the array
-                    newNarrations[question.QuestionId] = narrationContent;
-                } else {
-                    newNarrations[question.QuestionId] = [{ type: 'text', value: 'No narration available' }];
-                }
-            } catch (error) {
-                console.error(`Error fetching narration for question ${question.QuestionId}:`, error);
-                newNarrations[question.QuestionId] = [{ type: 'text', value: 'Error fetching narration' }];
+            const newNarrations = { ...narrations };
+            if (response.ok && data.data && data.data.length > 0) {
+                const narrationContent = JSON.parse(data.data[0].Content);
+                newNarrations[questionId] = narrationContent;
+            } else {
+                newNarrations[questionId] = [{ type: 'text', value: 'No narration available' }];
             }
+            setNarrations(newNarrations);
+        } catch (error) {
+            console.error(`Error fetching narration for question ${questions[currentIndex].QuestionId}:`, error);
         }
-        setNarrations(newNarrations);
-        
     };
 
+    const handleNextQuestion = () => {
+        setShowNarrations(false);
 
+        if (currentIndex < questions.length - 1) {
+            setCurrentIndex((prevIndex) => prevIndex + 1);
+        } else {
+            computeResults(); // Calculate results when the last question is completed
+        }
+    };
 
-    if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#007bff" />
-                <Text>Loading questions...</Text>
-            </View>
-        );
-    }
+    const computeResults = () => {
+        console.log('Computing Results...');
+        const correctCount = questions.filter(
+            (q) => userAnswers[q.QuestionId] === q.answer
+        ).length;
+
+        console.log('Correct Answers:', correctCount);
+        console.log('Total Questions:', questions.length);
+
+        setResults({
+            correct: correctCount,
+            total: questions.length,
+        });
+    };
 
     return (
         <ScrollView style={styles.container}>
             <Text style={styles.title}>Questions for Subtopic: {subtopic}</Text>
-            {questions.length > 0 ? (
-                questions.map((question, index) => (
-                    <View key={index} style={styles.questionContainer}>
-                        {/* Render question */}
-                        <QuestionRenderer
-                            question={question}
-                            onAnswerSelected={handleAnswerSelected}
-                        />
-                        {/* Render narration if available */}
-                        {narrations[question.QuestionId] && (
+            {questions.length > 0 && currentIndex < questions.length ? (
+                <View style={styles.questionContainer}>
+                    <QuestionRenderer
+                        question={questions[currentIndex]}
+                        onAnswerSelected={handleAnswerSelected}
+                    />
+
+                    {showNarrations ? (
+                        narrations[questions[currentIndex].QuestionId] && (
                             <View style={styles.narrationContainer}>
-                                {narrations[question.QuestionId].map((item, idx) => {
+                                {narrations[questions[currentIndex].QuestionId].map((item, idx) => {
                                     if (item.type === 'text') {
                                         return (
                                             <Text key={idx} style={styles.narrationText}>
@@ -160,56 +175,84 @@ const QuestionScreen = ({ route, navigation }) => {
                                     }
                                     return null;
                                 })}
+
+                                {/* Finish button shows when the user is on the last question */}
+                                <Button
+                                    title={currentIndex === questions.length - 1 ? 'Finish' : 'Next'}
+                                    onPress={currentIndex === questions.length - 1 ? computeResults : handleNextQuestion}
+                                />
                             </View>
-                        )}
-                    </View>
-                ))
+                        )
+                    ) : (
+                        <Button
+                            title={currentIndex === questions.length - 1 ? 'Submit' : 'Mark & View Narrations'}
+                            onPress={handleSubmit}
+                        />
+                    )}
+                </View>
+            ) : results ? (
+                // Display results after finishing the quiz
+                <View style={styles.resultContainer}>
+                    <Text style={styles.resultText}>
+                        You answered {results.correct} out of {results.total} questions correctly.
+                    </Text>
+                </View>
             ) : (
                 <Text>No questions available.</Text>
             )}
-            <Button title="Submit" onPress={handleSubmit} />
-            {results && (
-                <Text>
-                    You answered {results.correct} out of {results.total} questions correctly.
-                </Text>
-            )}
         </ScrollView>
     );
-    
 };
+
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
         padding: 16,
         backgroundColor: '#fff',
     },
     title: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 16,
     },
     questionContainer: {
-        marginBottom: 24,
+        marginBottom: 16,
+        padding: 16,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+        borderColor: '#ddd',
+        borderWidth: 1,
+    },
+    narrationContainer: {
+        marginTop: 16,
     },
     narrationText: {
-        fontSize: 16,
-        marginVertical: 8,
+        fontSize: 14,
+        marginBottom: 8,
     },
     narrationImage: {
         width: '100%',
         height: 200,
-        marginVertical: 8,
-        borderRadius: 8,
+        marginBottom: 8,
     },
     narrationVideoContainer: {
-        marginVertical: 8,
-        alignItems: 'center',
+        height: 200,
+        marginBottom: 8,
     },
     narrationVideo: {
         width: '100%',
-        height: 200,
+        height: '100%',
+    },
+    resultContainer: {
+        marginTop: 20,
+        padding: 16,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+    },
+    resultText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: 'green',
     },
 });
-
 
 export default QuestionScreen;
