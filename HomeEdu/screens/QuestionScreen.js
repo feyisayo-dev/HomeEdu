@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Button } from 'react-native';
+import { View, Text, Image, StyleSheet, ScrollView, ActivityIndicator, Button } from 'react-native';
 import axios from 'axios';
 import QuestionRenderer from '../renderer/QuestionRenderer';
 import { useUser } from '../context/UserContext';
+import { Video } from 'expo-av';
 
 const QuestionScreen = ({ route, navigation }) => {
     const { userData } = useUser();
@@ -88,17 +89,20 @@ const QuestionScreen = ({ route, navigation }) => {
                     `https://homeedu.fsdgroup.com.ng/api/narration/${question.QuestionId}`
                 );
                 const data = await response.json();
-                if (response.ok) {
-                    newNarrations[question.QuestionId] = data.narration || 'No narration available';
+
+                if (response.ok && data.data && data.data.length > 0) {
+                    const narrationContent = JSON.parse(data.data[0].Content); // Access the first item in the array
+                    newNarrations[question.QuestionId] = narrationContent;
                 } else {
-                    newNarrations[question.QuestionId] = 'Failed to fetch narration';
+                    newNarrations[question.QuestionId] = [{ type: 'text', value: 'No narration available' }];
                 }
             } catch (error) {
                 console.error(`Error fetching narration for question ${question.QuestionId}:`, error);
-                newNarrations[question.QuestionId] = 'Error fetching narration';
+                newNarrations[question.QuestionId] = [{ type: 'text', value: 'Error fetching narration' }];
             }
         }
         setNarrations(newNarrations);
+        
     };
 
 
@@ -118,15 +122,45 @@ const QuestionScreen = ({ route, navigation }) => {
             {questions.length > 0 ? (
                 questions.map((question, index) => (
                     <View key={index} style={styles.questionContainer}>
+                        {/* Render question */}
                         <QuestionRenderer
                             question={question}
                             onAnswerSelected={handleAnswerSelected}
                         />
-                        {/* Display narration if available */}
+                        {/* Render narration if available */}
                         {narrations[question.QuestionId] && (
-                            <Text style={styles.narrationText}>
-                                Narration: {narrations[question.QuestionId]}
-                            </Text>
+                            <View style={styles.narrationContainer}>
+                                {narrations[question.QuestionId].map((item, idx) => {
+                                    if (item.type === 'text') {
+                                        return (
+                                            <Text key={idx} style={styles.narrationText}>
+                                                {item.value}
+                                            </Text>
+                                        );
+                                    } else if (item.type === 'image') {
+                                        return (
+                                            <Image
+                                                key={idx}
+                                                source={{ uri: item.value }}
+                                                style={styles.narrationImage}
+                                            />
+                                        );
+                                    } else if (item.type === 'video') {
+                                        return (
+                                            <View key={idx} style={styles.narrationVideoContainer}>
+                                                <Video
+                                                    source={{ uri: item.value }}
+                                                    style={styles.narrationVideo}
+                                                    useNativeControls
+                                                    resizeMode="contain"
+                                                    isLooping={false}
+                                                />
+                                            </View>
+                                        );
+                                    }
+                                    return null;
+                                })}
+                            </View>
                         )}
                     </View>
                 ))
@@ -140,15 +174,42 @@ const QuestionScreen = ({ route, navigation }) => {
                 </Text>
             )}
         </ScrollView>
-
     );
+    
 };
-
 const styles = StyleSheet.create({
-    container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-    questionContainer: { marginBottom: 16 },
-    narrationText: { marginTop: 8, fontStyle: 'italic', color: '#555' },
+    container: {
+        flex: 1,
+        padding: 16,
+        backgroundColor: '#fff',
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 16,
+    },
+    questionContainer: {
+        marginBottom: 24,
+    },
+    narrationText: {
+        fontSize: 16,
+        marginVertical: 8,
+    },
+    narrationImage: {
+        width: '100%',
+        height: 200,
+        marginVertical: 8,
+        borderRadius: 8,
+    },
+    narrationVideoContainer: {
+        marginVertical: 8,
+        alignItems: 'center',
+    },
+    narrationVideo: {
+        width: '100%',
+        height: 200,
+    },
 });
+
 
 export default QuestionScreen;

@@ -25,7 +25,7 @@ const DashboardScreen = ({ route, navigation }) => {
                     if (!userData) return;
                     const id = userData.username;
                     const response = await axios.get(
-                        `https://homeedu.fsdgroup.com.ng/api/streaks?id=${id}`
+                        `https://homeedu.fsdgroup.com.ng/api/streaks?username=${id}`
                     );
                     setStreaks(response.data.streak_count);
                 } catch (error) {
