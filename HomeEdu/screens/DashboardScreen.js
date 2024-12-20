@@ -1,14 +1,15 @@
-
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
 import React, { useEffect, useState } from 'react';
-import { View, Button, Text, StyleSheet, Image, ScrollView } from 'react-native';
+import { View, Button, Text, FlatList, StyleSheet, Image, ScrollView } from 'react-native';
 import axios from 'axios';
 import { useUser } from '../context/UserContext';
-
 const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
     const [streaks, setStreaks] = useState(0);
+    const [reports, setReports] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (!userData) {
@@ -17,6 +18,25 @@ const DashboardScreen = ({ route, navigation }) => {
             setUserData(data); // Save it to context
         }
     }, [userData, setUserData]);
+
+    useEffect(() => {
+        const fetchReports = async () => {
+            try {
+                const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`);
+                if (response.data.status === 200) {
+                    setReports(response.data.data.slice(0, 5));
+                } else {
+                    setError('No reports found.');
+                }
+            } catch (err) {
+                setError('An error occurred while fetching reports.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchReports();
+    }, [userData.username]);
 
     useFocusEffect(
         useCallback(() => {
@@ -39,125 +59,157 @@ const DashboardScreen = ({ route, navigation }) => {
 
 
 
+    const sections = [
+        { type: 'info' },
+        { type: 'streaks' },
+        { type: 'reports' },
+        { type: 'timetable' },
+        { type: 'leaderboard' },
+        { type: 'subjects' },
+        { type: 'practice' },
+    ];
+
+    const renderItem = ({ item }) => {
+        switch (item.type) {
+            case 'info':
+                return (
+                    <View style={styles.row}>
+                        <View style={styles.box}>
+                            <Image source={{ uri: userData.avatar }} style={styles.avatar} />
+                            <Text style={styles.username}>{userData.username}</Text>
+                        </View>
+                    </View>
+                );
+            case 'streaks':
+                return (
+                    <View style={styles.box}>
+                        <Text style={styles.title}>Streaks</Text>
+                        <Text style={styles.content}>{streaks} 📚</Text>
+                    </View>
+                );
+            case 'reports':
+                return (
+                    <View>
+                        <Text style={styles.title}>Reports</Text>
+                        {loading ? (
+                            <Text>Loading...</Text>
+                        ) : error ? (
+                            <Text style={styles.error}>{error}</Text>
+                        ) : (
+                            reports.map((report, index) => (
+                                <View key={index} style={styles.reportItem}>
+                                    <Text style={styles.reportTitle}>
+                                        {report.ExamId || report.SubtopicId || 'Unknown'}
+                                    </Text>
+                                    <Text style={styles.reportScore}>Score: {report.Score}%</Text>
+                                </View>
+                            ))
+                        )}
+                    </View>
+                );
+            case 'timetable':
+                return (
+                    <View style={styles.box}>
+                        <Text style={styles.title}>Timetable</Text>
+                        <Text style={styles.content}>
+                            {userData.timetable || 'No schedule available'}
+                        </Text>
+                    </View>
+                );
+            case 'leaderboard':
+                return (
+                    <View style={styles.box}>
+                        <Text style={styles.title}>Leaderboard</Text>
+                        <Text style={styles.content}>
+                            {userData.leaderboard || 'No data available'}
+                        </Text>
+                    </View>
+                );
+            case 'subjects':
+                return (
+                    <View style={styles.box}>
+                        <Text style={styles.title}>Subjects</Text>
+                        <Button
+                            title="Subjects"
+                            onPress={() => navigation.navigate('Subject')}
+                        />
+                    </View>
+                );
+            case 'practice':
+                return (
+                    <View style={styles.box}>
+                        <Text style={styles.title}>Practice</Text>
+                        <Button
+                            title="Start Practice"
+                            onPress={() => navigation.navigate('Question')}
+                        />
+                    </View>
+                );
+            default:
+                return null;
+        }
+    };
+
     return (
-        <ScrollView style={styles.container}>
-            {/* First Row: User Info */}
-            <View style={styles.row}>
-                {/* User Info Box */}
-                <View style={styles.box}>
-                    <Image source={{ uri: userData.avatar }} style={styles.avatar} />
-                    <Text style={styles.username}>{userData.username}</Text>
-                </View>
-                {/* Streaks Box */}
-                <View style={styles.box}>
-                    <Text style={styles.title}>Streaks</Text>
-                    <Text style={styles.content}>{streaks} 📚</Text>
-                </View>
-            </View>
-
-            {/* Second Row: Report */}
-            <View style={styles.row}>
-                <View style={[styles.box, styles.fullWidth]}>
-                    <Text style={styles.title}>Report</Text>
-                    <Text style={styles.content}>{userData.report || "No reports yet"}</Text>
-                </View>
-            </View>
-
-            {/* Third Row: Timetable */}
-            <View style={styles.row}>
-                <View style={[styles.box, styles.fullWidth]}>
-                    <Text style={styles.title}>Timetable</Text>
-                    <Text style={styles.content}>
-                        {userData.timetable || "No schedule available"}
-                    </Text>
-                </View>
-            </View>
-
-            {/* Fourth Row: Leaderboard */}
-            <View style={styles.row}>
-                <View style={[styles.box, styles.fullWidth]}>
-                    <Text style={styles.title}>Leaderboard</Text>
-                    <Text style={styles.content}>
-                        {userData.leaderboard || "No data available"}
-                    </Text>
-                </View>
-            </View>
-
-            {/* Fifth Row: Subjects */}
-            <View style={styles.row}>
-                <View style={[styles.box, styles.fullWidth]}>
-                    <Text style={styles.title}>Subjects</Text>
-                    <Text style={styles.content}>See your subjects</Text>
-                    <Button
-                        title="Subjects"
-                        onPress={() => navigation.navigate('Subject')} // Ensure navigation is passed as a prop
-                    />
-                </View>
-            </View>
-
-
-            {/* Practice Row */}
-            <View style={styles.row}>
-                <View style={[styles.box, styles.fullWidth]}>
-                    <Text style={styles.title}>Practice</Text>
-                    <Text style={styles.content}>Start practicing by answering questions below!</Text>
-                    {/* Button to navigate to the QuestionScreen */}
-                    <Button
-                        title="Start Practice"
-                        onPress={() => navigation.navigate('Question')} // Ensure navigation is passed as a prop
-                    />
-                </View>
-            </View>
-
-
-        </ScrollView>
+        <FlatList
+            data={sections}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={renderItem}
+            contentContainerStyle={styles.container}
+        />
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
         backgroundColor: '#fff',
         padding: 16,
     },
     row: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
         marginBottom: 16,
     },
     box: {
-        flex: 1,
         backgroundColor: '#fff',
-        borderColor: '#007bff', // Blue border
+        borderColor: '#007bff',
         borderWidth: 2,
         borderRadius: 8,
         padding: 16,
-        margin: 4,
-    },
-    fullWidth: {
-        flex: 1,
+        marginBottom: 16,
     },
     avatar: {
         width: 60,
         height: 60,
         borderRadius: 30,
-        alignSelf: 'center',
     },
     username: {
-        fontSize: 16,
-        fontWeight: 'bold',
         textAlign: 'center',
         marginTop: 8,
+        fontWeight: 'bold',
     },
     title: {
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 8,
-        textAlign: 'center',
     },
     content: {
         fontSize: 14,
         textAlign: 'center',
+    },
+    reportItem: {
+        padding: 16,
+        backgroundColor: '#f8f8f8',
+        marginBottom: 8,
+        borderRadius: 8,
+    },
+    reportTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    reportScore: {
+        color: '#555',
+    },
+    error: {
+        color: 'red',
     },
 });
 
