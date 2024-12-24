@@ -73,18 +73,16 @@ const DashboardScreen = ({ route, navigation }) => {
         switch (item.type) {
             case 'info':
                 return (
-                    <View style={styles.row}>
-                        <View style={styles.box}>
-                            <Image source={{ uri: userData.avatar }} style={styles.avatar} />
-                            <Text style={styles.username}>{userData.username}</Text>
-                        </View>
+                    <View style={styles.infoContainer}>
+                        <Image source={{ uri: userData.avatar }} style={styles.infoAvatar} />
+                        <Text style={styles.infoUsername}>Welcome, {userData.username}</Text>
                     </View>
                 );
             case 'streaks':
                 return (
-                    <View style={styles.box}>
-                        <Text style={styles.title}>Streaks</Text>
-                        <Text style={styles.content}>{streaks} 📚</Text>
+                    <View style={styles.streaksContainer}>
+                        <Text style={styles.streaksTitle}>Streaks</Text>
+                        <Text style={styles.streaksCount}>{streaks} 📚</Text>
                     </View>
                 );
             case 'reports':
@@ -161,6 +159,49 @@ const DashboardScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+    infoContainer: {
+        flexDirection: 'row', // Layout items horizontally
+        alignItems: 'center', // Align avatar and username vertically
+        backgroundColor: '#f9f9f9', // Light background for a clean look
+        padding: 16,
+        borderRadius: 8,
+        marginBottom: 16,
+    },
+    infoAvatar: {
+        width: 80, // Larger size for emphasis
+        height: 80,
+        borderRadius: 40, // Makes the image circular
+        marginRight: 16, // Space between avatar and text
+        borderWidth: 2,
+        borderColor: '#fff', // Add a border for a polished look
+    },
+    infoUsername: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333', // Text contrast with the background
+    },
+    streaksContainer: {
+        alignSelf: 'center', // Center the streaks box
+        width: '60%', // Restrict width to make it compact
+        backgroundColor: '#f9f9f9', // Light background for a clean look
+        padding: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#007bff', // Use a theme color for the border
+        alignItems: 'center', // Center the content
+        marginBottom: 16,
+    },
+    streaksTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#007bff', // Theme color for the title
+        marginBottom: 8,
+    },
+    streaksCount: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#333', // Neutral color for the count
+    },
     container: {
         backgroundColor: '#fff',
         padding: 16,

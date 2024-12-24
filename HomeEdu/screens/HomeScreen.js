@@ -18,10 +18,6 @@ const HomePage = ({ navigation }) => {
         <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Register')}>
           <Text style={styles.buttonText}>Sign Up</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Categories')}>
-          <Text style={styles.buttonText}>Browse Quizzes</Text>
-        </TouchableOpacity>
       </View>
     </ImageBackground>
   );
