@@ -37,21 +37,16 @@ const ExampleScreen = ({ route, navigation }) => {
             setLoading(false);
         }
     };
-
-    const renderItem = ({ item }) => (
+    const ExampleCard = ({ example }) => (
         <View style={styles.card}>
-            {item.Image ? (
-                <Image
-                    source={{ uri: item.Image }}
-                    style={styles.image}
-                />
-            ) : (
-                null
-            )}
-            <Text style={styles.text}>Instruction: {item.Instruction}</Text>
-            <Text style={styles.text}>{item.Text}</Text>
+            {example.Image ? (
+                <Image source={{ uri: example.Image }} style={styles.image} />
+            ) : null}
+            <Text style={styles.text}>Instruction: {example.Instruction}</Text>
+            <Text style={styles.text}>{example.Text}</Text>
         </View>
     );
+
 
     if (loading) {
         return (
@@ -64,11 +59,15 @@ const ExampleScreen = ({ route, navigation }) => {
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Examples for Subtopic: {subtopic}</Text>
-            {examples.length > 0 ? (
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#864af9" />
+                </View>
+            ) : examples.length > 0 ? (
                 <FlatList
                     data={examples}
                     keyExtractor={(item) => item.ExampleId.toString()}
-                    renderItem={renderItem}
+                    renderItem={({ item }) => <ExampleCard example={item} />}
                     contentContainerStyle={styles.list}
                 />
             ) : (
@@ -76,71 +75,95 @@ const ExampleScreen = ({ route, navigation }) => {
             )}
             <TouchableOpacity
                 style={styles.button}
-                onPress={() => navigation.navigate('Question', { 'subtopicId': subtopicId, 'subtopic': subtopic })}
+                onPress={() =>
+                    navigation.navigate('Question', { subtopicId, subtopic })
+                }
             >
                 <Text style={styles.buttonText}>Next</Text>
             </TouchableOpacity>
-
         </View>
     );
+
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#f4f4f4f', // Light background
         padding: 16,
-        backgroundColor: '#fff',
     },
     title: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: 'bold',
-        marginBottom: 16,
+        //color: '#007bff', // Themed blue color
+        color: '#864af9', // Themed blue color
+        marginBottom: 24,
+        textAlign: 'center',
     },
     list: {
         paddingBottom: 16,
     },
     card: {
-        marginBottom: 16,
+        backgroundColor: '#fcfcfc', // Card background
         padding: 16,
         borderRadius: 8,
+        marginBottom: 16,
         borderWidth: 1,
-        borderColor: '#ccc',
-        backgroundColor: '#f9f9f9',
+        borderColor: '#ddd', // Light border
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2, // Android shadow
     },
     image: {
         width: '100%',
-        height: 200,
+        height: 200, // Fixed height for uniform images
         borderRadius: 8,
-        marginBottom: 8,
-    },
-    placeholder: {
-        width: '100%',
-        height: 200,
-        borderRadius: 8,
-        backgroundColor: '#e0e0e0',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    placeholderText: {
-        color: '#888',
-        fontSize: 16,
+        marginBottom: 12,
+        resizeMode: 'cover', // Fit image within boundaries
+        borderWidth: 1,
+        borderColor: '#864af9',
+        objectFit: 'contain',
+        tintColor: '864af9'
     },
     text: {
         fontSize: 16,
-        marginBottom: 4,
-    },
-    noExamplesText: {
-        fontSize: 16,
-        color: '#888',
-        textAlign: 'center',
-        marginTop: 32,
+        lineHeight: 24, // Improved readability
+        color: '#333', // Neutral text color
+        marginBottom: 8,
+        fontFamily: 'latto'
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: '#f9f9f9',
+    },
+    noExamplesText: {
+        fontSize: 16,
+        color: '#888', // Subtle color for no examples message
+        textAlign: 'center',
+        marginTop: 20,
+    },
+    button: {
+        backgroundColor: '#864af9',
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    buttonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#fff', // White text for contrast
     },
 });
+
 
 export default ExampleScreen;

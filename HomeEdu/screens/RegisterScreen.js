@@ -140,7 +140,10 @@ export default function RegisterScreen({ navigation }) {
 
       // Handle success
       Alert.alert('Success', response.data.message);
-      navigation.navigate('Login');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+    });
     } catch (error) {
       // Handle errors
       Alert.alert(
@@ -160,14 +163,14 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Username"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               value={username}
               onChangeText={setUsername}
             />
             <TextInput
               style={styles.input}
               placeholder="Full Name"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               value={fullName}
               onChangeText={setFullName}
             />
@@ -199,14 +202,14 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               value={email}
               onChangeText={setEmail}
             />
             <TextInput
               style={styles.input}
               placeholder="Password"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -214,7 +217,7 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               secureTextEntry
               value={confirmpassword}
               onChangeText={setconfirmPassword}
@@ -227,7 +230,7 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Phone Number"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               keyboardType="phone-pad"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
@@ -272,7 +275,7 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Parent/Guardian Name"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               value={parentName}
               onChangeText={setParentName}
             />
@@ -281,7 +284,7 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Parent/Guardian Contact"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               keyboardType="phone-pad"
               value={parentContact}
               onChangeText={setParentContact}
@@ -291,7 +294,7 @@ export default function RegisterScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Address"
-              placeholderTextColor="white"
+              placeholderTextColor="#666666"
               value={address}
               onChangeText={setAddress}
             />
@@ -304,9 +307,13 @@ export default function RegisterScreen({ navigation }) {
   }
   return (
     <ImageBackground
-      source={require('../assets/background.jpg')}
+      source={require('../assets/Rectangle_106.png')}
       style={styles.background}
       resizeMode="cover">
+      <View style={styles.top}>
+        <Text style={styles.toptext}>Register</Text>
+        <Text style={styles.topsubtext}>Sign up to begin your journey</Text>
+      </View>
       <View style={styles.container}>
         <Text style={styles.title}>Register</Text>
         {renderStage()}
@@ -339,20 +346,43 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  top: {
+    height: '20%',
+    width: '100%',
+    paddingLeft: 20,
+    display: 'flex',
+   // alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toptext: {
+   fontSize: 36,
+   fontWeight: 700,
+   color: '#fcfcfc'
+  },
+  topsubtext: {
+   fontSize: 16,
+   fontWeight: 400,
+   color: '#cccccc'
+  },
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'start',
     padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Add transparency overlay
+    paddingTop: 60,
+    //backgroundColor: 'rgba(0, 0, 0, 0.5)', // Add transparency overlay
+    backgroundColor: '#fcfcfc',
+    borderTopLeftRadius: '20%',
+    borderTopRightRadius: '0'
   },
   title: { fontSize: 24, marginBottom: 20, textAlign: 'center', color: 'white' },
   input: {
     borderWidth: 1,
-    marginBottom: 10,
+    marginBottom: 24,
     padding: 10,
     borderRadius: 5,
     borderColor: 'white',
     color: 'white',
+    backgroundColor: '#dddddd'
   },
   background: {
     flex: 1,
@@ -366,7 +396,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   label: {
-    color: 'white',
+    color: '',
     marginBottom: 5,
   },
   navigationButtons: {
@@ -375,7 +405,8 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   button: {
-    backgroundColor: 'rgba(0, 0, 0, 0.8)', // Black background with 0.8 opacity
+    //backgroundColor: 'rgba(0, 0, 0, 0.8)', // Black background with 0.8 opacity
+    backgroundColor: '#864AF9', // Black background with 0.8 opacity
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10, // Rounded corners
@@ -394,7 +425,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
-    color: 'white',
+    color: '#bbbbbb',
   },
   dateButton: {
     backgroundColor: 'black',

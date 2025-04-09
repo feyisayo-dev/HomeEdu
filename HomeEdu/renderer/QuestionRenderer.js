@@ -1,121 +1,190 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, Image, TextInput, StyleSheet } from 'react-native';
 import { RadioButton } from 'react-native-paper';
+
+const ObjectiveQuestion = ({ question, selectedOption, onSelection, borderColor }) => (
+    <View style={[styles.questionContainer, { borderColor }]}>
+        {question.image && (
+            <Image
+                source={{ uri: question.image }}
+                style={styles.questionImage}
+            />
+        )}
+        <Text style={styles.questionText}>{question.content}</Text>
+        <RadioButton.Group onValueChange={onSelection} value={selectedOption}>
+            {question.options.map((option, index) => (
+                <View key={index} style={styles.optionContainer}>
+                    <RadioButton value={option} />
+                    <Text style={styles.optionText}>{option}</Text>
+                </View>
+            ))}
+        </RadioButton.Group>
+    </View>
+);
+
+
+const TheoryQuestion = ({ question, onAnswerChange, borderColor }) => (
+    <View style={[styles.questionContainer, { borderColor }]}>
+        {question.image && (
+            <Image
+                source={{ uri: question.image }}
+                style={styles.questionImage}
+            />
+        )}
+        <Text style={styles.questionText}>{question.content}</Text>
+        <TextInput
+            style={styles.textArea}
+            placeholder="Write your answer here"
+            multiline
+            numberOfLines={4}
+            onChangeText={onAnswerChange}
+        />
+    </View>
+);
+
+
+const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor }) => (
+    <View style={[styles.questionContainer, { borderColor }]}>
+        {question.image && (
+            <Image
+                source={{ uri: question.image }}
+                style={styles.questionImage}
+            />
+        )}
+        <Text style={styles.questionText}>{question.content}</Text>
+        <TextInput
+            style={styles.input}
+            placeholder="Fill in the blank"
+            onChangeText={onAnswerChange}
+        />
+    </View>
+);
+
 
 const QuestionRenderer = ({ question, onAnswerSelected }) => {
     const [selectedOption, setSelectedOption] = useState(null);
 
     const handleSelection = (value) => {
         setSelectedOption(value);
-        onAnswerSelected(question.QuestionId, value); // Pass the selected answer back
+        onAnswerSelected(question.QuestionId, value);
     };
 
-    // Determine border color based on question status (answered, correct/incorrect)
-    const borderColor = question.isCorrect === undefined
-        ? '#ddd' // Default border color (when not answered)
-        : question.isCorrect === null
-        ? '#ddd' // Neutral color if the answer is not yet checked
-        : question.isCorrect
-        ? 'green' // Correct answer
-        : 'red'; // Incorrect answer
+    const handleAnswerChange = (value) => {
+        onAnswerSelected(question.QuestionId, value);
+    };
+    const getBorderColor = (question) => {
+        if (question.isCorrect === undefined) {
+            return '#ddd'; // Default border color (unanswered)
+        } else if (question.isCorrect === null) {
+            return '#ddd'; // Neutral color if the answer is not yet checked
+        } else if (question.isCorrect) {
+            return 'green'; // Correct answer
+        } else {
+            return 'red'; // Incorrect answer
+        }
+    };
 
     switch (question.type) {
         case 'objective':
         case 'true-false':
             return (
-                <View style={[styles.container, { borderColor }]}>
-                    <Text style={styles.questionText}>{question.content}</Text>
-                    <RadioButton.Group
-                        onValueChange={handleSelection}
-                        value={selectedOption}
-                    >
-                        {question.options.map((option, index) => (
-                            <View key={index} style={styles.optionContainer}>
-                                <RadioButton value={option} />
-                                <Text style={styles.optionText}>{option}</Text>
-                            </View>
-                        ))}
-                    </RadioButton.Group>
-                </View>
+                <ObjectiveQuestion
+                    question={question}
+                    selectedOption={selectedOption}
+                    onSelection={handleSelection}
+                    borderColor={getBorderColor(question)} // Pass borderColor as a prop
+                />
             );
 
         case 'theory':
             return (
-                <View style={[styles.container, { borderColor }]}>
-                    <Text style={styles.questionText}>{question.content}</Text>
-                    <TextInput
-                        style={styles.textArea}
-                        placeholder="Write your answer here"
-                        multiline
-                        numberOfLines={4}
-                        onChangeText={(text) =>
-                            onAnswerSelected(question.QuestionId, text)
-                        }
-                    />
-                </View>
+                <TheoryQuestion
+                    question={question}
+                    onAnswerChange={handleAnswerChange}
+                    borderColor={getBorderColor(question)} // Pass borderColor as a prop
+                />
             );
 
         case 'fill-in-the-gaps':
             return (
-                <View style={[styles.container, { borderColor }]}>
-                    <Text style={styles.questionText}>{question.content}</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Fill in the blank"
-                        onChangeText={(text) =>
-                            onAnswerSelected(question.QuestionId, text)
-                        }
-                    />
-                </View>
+                <FillInTheGapsQuestion
+                    question={question}
+                    onAnswerChange={handleAnswerChange}
+                    borderColor={getBorderColor(question)} // Pass borderColor as a prop
+                />
             );
 
         default:
             return (
-                <View style={styles.container}>
+                <View style={[styles.unsupportedContainer, { borderColor: '#ddd' }]}>
                     <Text>Unsupported question type: {question.type}</Text>
                 </View>
             );
     }
+
 };
 
 
+
 const styles = StyleSheet.create({
-    container: {
-        marginBottom: 16,
-        padding: 16,
-        backgroundColor: '#f9f9f9',
+    questionContainer: {
+        borderWidth: 2, // Ensure border is visible
         borderRadius: 8,
-        borderColor: '#ddd',
-        borderWidth: 1,
+        padding: 16,
+        marginBottom: 16,
+        backgroundColor: '#fff',
+        borderColor: '#864af9',
+        shadowColor: '#864af9',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 3, // Elevation for Android
+    },
+    questionImage: {
+        width: '100%',
+        height: 200, // Fixed height
+        borderRadius: 8,
+        marginBottom: 12,
+        resizeMode: 'contain', // Ensure the image fits within the boundaries
     },
     questionText: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
-        marginBottom: 8,
+        color: '#333',
+        marginBottom: 16,
     },
     optionContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 12,
     },
     optionText: {
-        fontSize: 14,
+        fontSize: 16,
+        color: '#555',
         marginLeft: 8,
     },
     textArea: {
-        borderColor: '#ddd',
         borderWidth: 1,
+        borderColor: '#ddd',
         borderRadius: 8,
-        padding: 8,
-        marginTop: 8,
+        padding: 12,
+        fontSize: 16,
+        textAlignVertical: 'top', // Align text at the top for multiline inputs
     },
     input: {
-        borderColor: '#ddd',
         borderWidth: 1,
+        borderColor: '#864af9',
         borderRadius: 8,
-        padding: 8,
-        marginTop: 8,
+        padding: 12,
+        fontSize: 16,
+    },
+    unsupportedContainer: {
+        padding: 16,
+        backgroundColor: '#f8d7da',
+        borderRadius: 8,
+        marginBottom: 16,
     },
 });
+
 
 export default QuestionRenderer;

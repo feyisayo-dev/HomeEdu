@@ -32,51 +32,73 @@ const SubtopicScreen = ({ route, navigation }) => {
   if (error) return <Text>{error}</Text>; // Show error message if any
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Subtopics for {Topic}</Text>
-      <FlatList
-        data={subtopics}
-        keyExtractor={(item) => item.SubtopicId.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.subtopicItem}
-            onPress={() => navigation.navigate('Explanation', { subtopicId: item.SubtopicId, Subtopic: item.Subtopic })}
-          >
-            <Text style={styles.subtopicItem}>{item.Subtopic}</Text>
-          </TouchableOpacity>
-        )}
-      />
-    </View>
+<View style={styles.subtopicsContainer}>
+  <Text style={styles.subtopicsTitle}>Subtopics for {Topic}</Text>
+  <FlatList
+    data={subtopics}
+    keyExtractor={(item) => item.SubtopicId.toString()}
+    renderItem={({ item }) => (
+      <TouchableOpacity
+        style={styles.subtopicItem}
+        onPress={() =>
+          navigation.navigate('Explanation', { subtopicId: item.SubtopicId, Subtopic: item.Subtopic })
+        }
+      >
+        <Text style={styles.subtopicText}>{item.Subtopic}</Text>
+      </TouchableOpacity>
+    )}
+    contentContainerStyle={styles.subtopicsList}
+    showsVerticalScrollIndicator={false}
+  />
+</View>
+
   );
 };
 
 // Define styles here
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#f5f5f5',
+  subtopicsContainer: {
+      flex: 1,
+      backgroundColor: '#f9f9f9', // Light gray background
+      padding: 16,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
+  subtopicsTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: '#864af9', // Purple-themed color
+      marginBottom: 24,
+      textAlign: 'center', // Center-align the title
+      fontFamily: 'latto',
+  },
+  subtopicsList: {
+      paddingBottom: 16,
   },
   subtopicItem: {
-    backgroundColor: '#fff',
-    padding: 15,
-    marginVertical: 8,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
+      //backgroundColor: '#D8C9F4', // Light purple background E9E2F8
+      backgroundColor: '#E9E2F8', // Light purple background E9E2F8
+      //opacity: 0.6,
+      paddingVertical: 16,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderLeftWidth: 6,
+      //borderColor: '#673ab7', // Purple border
+      borderColor: '#864af9', // Purple border
+      marginBottom: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 3, // Elevation for Android
+      alignItems: 'start', // Center the text
   },
   subtopicText: {
-    fontSize: 18,
-    color: '#333',
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#333', // Neutral text color
+      fontFamily: 'latto',
   },
 });
+
 
 export default SubtopicScreen;

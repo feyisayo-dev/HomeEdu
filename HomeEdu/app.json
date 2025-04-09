@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "homeedu",
-    "slug": "snack-dd387e16-033f-48c5-bbb2-ae195dd81c5d",
+    "slug": "snack-af3caf87-beb8-4c10-bef6-e6e4059e4023",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,9 +24,16 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-video",
-      "react-native-video"
-    ]
+    "extra": {
+      "eas": {
+        "projectId": "73dafd1b-c779-4fd4-8b71-eeb16892019b"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/73dafd1b-c779-4fd4-8b71-eeb16892019b"
+    }
   }
 }

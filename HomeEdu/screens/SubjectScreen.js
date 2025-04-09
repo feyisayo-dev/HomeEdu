@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
+  Image,
+} from 'react-native';
 import axios from 'axios';
 import { useUser } from '../context/UserContext';
 
-const SubjectScreen = ({navigation}) => {
+const SubjectScreen = ({ navigation }) => {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -11,24 +19,26 @@ const SubjectScreen = ({navigation}) => {
 
   useEffect(() => {
     const fetchSubjects = async () => {
-        try {
-          console.log("This is class",userData.class)
+      try {
+        console.log('This is class', userData.class);
 
-          const response = await axios.post('https://homeedu.fsdgroup.com.ng/api/subjects', {
+        const response = await axios.post(
+          'https://homeedu.fsdgroup.com.ng/api/subjects',
+          {
             class: userData.class,
-          });
-          if (response.data.status === 200) {
-            setSubjects(response.data.data);
-          } else {
-            setError("Failed to load subjects.");
           }
-        } catch (err) {
-          setError("An error occurred while fetching subjects.");
-        } finally {
-          setLoading(false);
+        );
+        if (response.data.status === 200) {
+          setSubjects(response.data.data);
+        } else {
+          setError('Failed to load subjects.');
         }
-      };
-      
+      } catch (err) {
+        setError('An error occurred while fetching subjects.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
     fetchSubjects();
   }, [userData.class]);
@@ -50,56 +60,103 @@ const SubjectScreen = ({navigation}) => {
   }
 
   return (
-<View style={styles.container}>
-  <Text style={styles.title}>Subjects for Class {userData.class}</Text>
-  <FlatList
-    data={subjects}
-    keyExtractor={(item) => item.SubjectId.toString()}
-    renderItem={({ item }) => (
-      <View style={styles.subjectItem}>
-        <Text 
-          style={styles.subjectText}
-          onPress={() => navigation.navigate('Topic', { subjectId: item.Subject })} // Pass SubjectId here
-        > 
-          {item.Subject}
-        </Text>
-      </View>
-    )}
-  />
-</View>
-
+    <View style={styles.subjectSelectionContainer}>
+      <Text style={styles.subjectSelectionTitle}>
+        Subjects for Class {userData.class}
+      </Text>
+      <FlatList
+        data={subjects}
+        keyExtractor={(item) => item.SubjectId.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.subjectItem}
+            onPress={() =>
+              navigation.navigate('Topic', { subjectId: item.Subject })
+            }>
+            <View style={styles.subCont}>
+              <Image
+                source={
+                  item.Icon
+                    ? { uri: item.Icon } // Use the icon URL from the database
+                    : require('../assets/education.png') // Fallback to default icon
+                }
+                style={styles.subImg}
+              />
+              <Text style={styles.subjectText}>{item.Subject}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        contentContainerStyle={styles.subjectList}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  subjectSelectionContainer: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#f4f4f4', // Light gray background
+    padding: 16,
   },
-  title: {
-    fontSize: 20,
+  subjectSelectionTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
+    color: '#864af9', // Themed color
+    marginBottom: 16,
+    textAlign: 'center', // Center-align the title
+    fontFamily: 'latto',
+  },
+  subjectList: {
+    paddingBottom: 16,
+    display: 'flex',
+    flexWrap: 'wrap',
+    flexDirection: 'row',
+    alignItems: 'center',
+    // justifyContent: 'space-between'
+    gap: 20,
+    justifyContent: 'center',
   },
   subjectItem: {
-    padding: 15,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 10,
-    marginBottom: 10,
+    backgroundColor: '#fcfcfc', // Light blue background
+    // paddingVertical: 16,
+    //paddingHorizontal: 12,
+    borderRadius: 8,
+    //borderWidth: 1,
+    //borderColor: '#007bff', // Border matching the theme
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3, // Elevation for Android
+    display: 'flex',
+    alignItems: 'center', // Center the text
+    justifyContent: 'center',
+    height: 200,
+    width: 160,
+  },
+  subCont: {
+    display: 'flex',
+    alignItems: 'center', // Center the text
+    justifyContent: 'center',
+    textAlign: 'center',
+  },
+  subImg: {
+    width: 40,
+    height: 40,
+    textAlign: 'center',
+    margin: 'auto',
+    marginBottom: 20,
   },
   subjectText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#333',
-  },
-  center: {
-    flex: 1,
+    display: 'flex',
+    alignItems: 'center', // Center the text
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
-    color: 'red',
-    fontSize: 16,
+    fontFamily: 'latto',
   },
 });
 
