@@ -13,6 +13,8 @@ import {
     ScrollView,
 } from 'react-native';
 import axios from 'axios';
+import { Ionicons } from '@expo/vector-icons';
+import { TextInput } from 'react-native';
 import { useUser } from '../context/UserContext';
 const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
@@ -22,6 +24,7 @@ const DashboardScreen = ({ route, navigation }) => {
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('recent');
     const [modalVisible, setModalVisible] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
 
     const [subjects, setSubjects] = useState([]);
     useEffect(() => {
@@ -36,6 +39,7 @@ const DashboardScreen = ({ route, navigation }) => {
         const fetchSubjects = async () => {
             try {
                 console.log('This is class', userData.class);
+                console.log("This is the userData", userData)
 
                 const response = await axios.post(
                     'https://homeedu.fsdgroup.com.ng/api/subjects',
@@ -124,17 +128,19 @@ const DashboardScreen = ({ route, navigation }) => {
         switch (item.type) {
             case 'info':
                 return (
-                    <View style={styles.infoContainer}>
-                        <View style={styles.leftInfo}>
-                            <Text style={styles.hello}> Hello </Text>
-                            <Text style={styles.infoUsername}> {userData.username}</Text>
-                        </View>
+                    <TouchableOpacity onPress={() => setShowProfileModal(true)}>
+                        <View style={styles.infoContainer}>
+                            <View style={styles.leftInfo}>
+                                <Text style={styles.hello}> Hello </Text>
+                                <Text style={styles.infoUsername}> {userData.username}</Text>
+                            </View>
 
-                        <Image
-                            source={{ uri: userData.avatar }}
-                            style={styles.infoAvatar}
-                        />
-                    </View>
+                            <Image
+                                source={{ uri: userData.avatar }}
+                                style={styles.infoAvatar}
+                            />
+                        </View>
+                    </TouchableOpacity>
                 );
             case 'streaks':
                 return (
@@ -354,13 +360,119 @@ const DashboardScreen = ({ route, navigation }) => {
     };
 
     return (
-        <FlatList
-            data={sections}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={renderItem}
-            contentContainerStyle={styles.container}
-        />
+        <>
+            <FlatList
+                data={sections}
+                keyExtractor={(item, index) => index.toString()}
+                renderItem={renderItem}
+                contentContainerStyle={styles.container}
+            />
+
+            {showProfileModal && (
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Your Profile</Text>
+
+                        <Image source={{ uri: userData.avatar }} style={styles.modalAvatar} />
+
+                        <View style={styles.inputRow}>
+                            <Text style={styles.modalLabel}>Full Name:</Text>
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={userData.fullName}
+                                    editable={false} // Set to true if you want to allow editing
+                                />
+                                <TouchableOpacity style={styles.editIcon}>
+                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputRow}>
+                            <Text style={styles.modalLabel}>Username:</Text>
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={userData.username}
+                                    editable={false} // Set to true if you want to allow editing
+                                />
+                                <TouchableOpacity style={styles.editIcon}>
+                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputRow}>
+                            <Text style={styles.modalLabel}>Email:</Text>
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={stylkes.modalInput}
+                                    value={userData.email}
+                                    editable={false} // Set to true if you want to allow editing
+                                />
+                                <TouchableOpacity style={styles.editIcon}>
+                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputRow}>
+                            <Text style={styles.modalLabel}>Phone:</Text>
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={userData.phoneNumber}
+                                    editable={false} // Set to true if you want to allow editing
+                                />
+                                <TouchableOpacity style={styles.editIcon}>
+                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.inputRow}>
+                            <Text style={styles.modalLabel}>Class:</Text>
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={userData.class}
+                                    editable={false} // Set to true if you want to allow editing
+                                />
+                                <TouchableOpacity style={styles.editIcon}>
+                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View style={styles.buttonRow}>
+                            <TouchableOpacity
+                                style={styles.logoutBtn}
+                                onPress={() => {
+                                    setUserData(null);
+                                    navigation.reset({
+                                        index: 0,
+                                        routes: [{ name: 'Login' }],
+                                    });
+                                }}
+                            >
+                                <Text style={styles.logoutText}>Logout</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => setShowProfileModal(false)}
+                                style={styles.cancelBtn}
+                            >
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            )}
+
+        </>
     );
+
 };
 
 const styles = StyleSheet.create({
@@ -371,7 +483,7 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 8,
         marginBottom: 16,
-       
+
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -720,6 +832,105 @@ const styles = StyleSheet.create({
     },
     error: {
         color: 'red',
+    },
+    modalOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        height: '100%',
+        width: '100%',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    modalContent: {
+        backgroundColor: '#864AF9',
+        padding: 20,
+        borderRadius: 20,
+        width: '85%',
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#fcfcfc',
+        marginBottom: 15,
+    },
+    modalAvatar: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        marginBottom: 15,
+    },
+    modalLabel: {
+        fontWeight: '600',
+        fontSize: 14,
+        color: '#fcfcfc',
+        marginTop: 10,
+    },
+    modalText: {
+        fontSize: 16,
+        color: '#fcfcfc',
+    },
+    buttonRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 20,
+        width: '100%',
+    },
+    logoutBtn: {
+        backgroundColor: '#fcfcfc',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        marginRight: 10,
+    },
+    logoutText: {
+        color: '#864AF9',
+        fontWeight: 'bold',
+    },
+    cancelBtn: {
+        backgroundColor: '#fcfcfc',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+    },
+    cancelText: {
+        color: '#864AF9',
+        fontWeight: 'bold',
+    },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+
+    modalLabel: {
+        width: 90, // fixed label width
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fcfcfc',
+    },
+
+    inputContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+
+    modalInput: {
+        flex: 1,
+        fontSize: 14,
+        color: '#000',
+    },
+
+    editIcon: {
+        marginLeft: 8,
     },
 });
 

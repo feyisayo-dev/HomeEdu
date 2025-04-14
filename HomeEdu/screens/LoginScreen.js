@@ -1,15 +1,18 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, ImageBackground,Image,TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, ImageBackground, Image, TouchableOpacity } from 'react-native';
 import axios from 'axios';
 import { UserContext } from '../context/UserContext';
+import { ActivityIndicator } from 'react-native';
 
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { setUserData } = useContext(UserContext); // Access the context
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    setLoading(true);
     try {
       const response = await axios.post('https://homeedu.fsdgroup.com.ng/api/login', {
         email,
@@ -27,6 +30,8 @@ export default function LoginScreen({ navigation }) {
       }
     } catch (error) {
       Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
+    } finally {
+      setLoading(false); // hide loader
     }
   };
 
@@ -41,8 +46,8 @@ export default function LoginScreen({ navigation }) {
         <Text style={styles.topsubtext}>Sign in to continue your journey</Text>
       </View>
       <View style={styles.container}>
-    
-     
+
+
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -58,8 +63,12 @@ export default function LoginScreen({ navigation }) {
           onChangeText={setPassword}
           placeholderTextColor="#666666"
         />
-        <TouchableOpacity onPress={handleLogin} color="#864AF9"  style={styles.btn}>
-          <Text style={styles.btnText}>Login</Text>
+        <TouchableOpacity onPress={handleLogin} style={styles.btn} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.btnText}>Login</Text>
+          )}
         </TouchableOpacity>
         <Text onPress={() => navigation.navigate('Register')
         } style={styles.link}>
@@ -69,7 +78,7 @@ export default function LoginScreen({ navigation }) {
     </ImageBackground>
   );
 }
- //  <Text style={styles.title}>HomeEdu</Text>
+//  <Text style={styles.title}>HomeEdu</Text>
 
 const styles = StyleSheet.create({
   background: {
@@ -81,19 +90,19 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingLeft: 20,
     display: 'flex',
-   // alignItems: 'center',
+    // alignItems: 'center',
     justifyContent: 'center',
   },
   toptext: {
-   fontSize: 36,
-   fontWeight: 700,
-   color: '#fcfcfc',
+    fontSize: 36,
+    fontWeight: 700,
+    color: '#fcfcfc',
     fontFamily: 'latto',
   },
   topsubtext: {
-   fontSize: 16,
-   fontWeight: 400,
-   color: '#f4f4f4',
+    fontSize: 16,
+    fontWeight: 400,
+    color: '#f4f4f4',
     fontFamily: 'latto',
   },
   container: {
@@ -101,10 +110,10 @@ const styles = StyleSheet.create({
     justifyContent: 'start',
     padding: 20,
     paddingTop: 100,
-   // backgroundColor: 'rgba(0, 0, 0, 0.5)', // Add transparency overlay
-   backgroundColor: '#fcfcfc',
-   borderTopLeftRadius: '20%',
-   borderTopRightRadius: '0',
+    // backgroundColor: 'rgba(0, 0, 0, 0.5)', // Add transparency overlay
+    backgroundColor: '#fcfcfc',
+    borderTopLeftRadius: '20%',
+    borderTopRightRadius: '0',
   },
   illustrationimg: {
     height: 150,
@@ -137,7 +146,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     borderRadiu: 8,
     backgroundColor: '#864AF9',
-     padding: 15,
+    padding: 15,
     borderRadius: 10,
     marginVertical: 10,
     width: '90%',
@@ -156,7 +165,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  regLink:{
+  regLink: {
     color: '#864af9',
   },
 });

@@ -211,7 +211,7 @@ const QuestionScreen = ({ route, navigation }) => {
            </View>
           </View>
 
-          //<View style={styles.bottomDiv}></View>
+          <View style={styles.bottomDiv}></View>
             {questions.length > 0 && currentIndex < questions.length ? (
                 <View style={styles.questionContainer}>
                     <QuestionRenderer
