@@ -407,7 +407,7 @@ const DashboardScreen = ({ route, navigation }) => {
                             <Text style={styles.modalLabel}>Email:</Text>
                             <View style={styles.inputContainer}>
                                 <TextInput
-                                    style={stylkes.modalInput}
+                                    style={styles.modalInput}
                                     value={userData.email}
                                     editable={false} // Set to true if you want to allow editing
                                 />
