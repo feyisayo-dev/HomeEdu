@@ -20,6 +20,7 @@ const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
     const [streaks, setStreaks] = useState(0);
     const [reports, setReports] = useState([]);
+    const [leaderboard, setLeaderboard] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('recent');
@@ -34,6 +35,32 @@ const DashboardScreen = ({ route, navigation }) => {
             setUserData(data); // Save it to context
         }
     }, [userData, setUserData]);
+
+    useEffect(() => {
+        // Fetch leaderboard based on the subjectId
+        const fetchLeaderboard = async () => {
+            try {
+                const formData = new FormData();
+                formData.append('class', userData.class);  // E.g. "Grade 1"
+
+                const response = await axios.post('https://homeedu.fsdgroup.com.ng/api/getleaderboard', formData);
+                if (response.data.status === 200) {
+                    console.log("This is leaderboard for class", userData.class, ",", response.data.data);
+                    setLeaderboard(response.data.data);
+                } else {
+                    setError("Failed to load leaderboard.");
+                }
+            } catch (err) {
+                setError("An error occurred while fetching topics.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+
+        fetchLeaderboard();
+    }, [userData.class]);
+
 
     useEffect(() => {
         const fetchSubjects = async () => {
@@ -318,17 +345,19 @@ const DashboardScreen = ({ route, navigation }) => {
                 return (
                     <View style={styles.leaderboardContainer}>
                         <Text style={styles.leaderboardTitle}>Leaderboard</Text>
-                        {userData.leaderboard && userData.leaderboard.length > 0 ? (
+                        {leaderboard && leaderboard.length > 0 ? (
                             <FlatList
-                                data={userData.leaderboard}
+                                data={leaderboard}
                                 keyExtractor={(item, index) => index.toString()}
                                 renderItem={({ item, index }) => (
                                     <View style={styles.leaderboardItem}>
-                                        <Text style={styles.leaderboardRank}>{index + 1}</Text>
-                                        <Text style={styles.leaderboardName}>{item.name}</Text>
-                                        <Text style={styles.leaderboardScore}>
-                                            {item.score} pts
-                                        </Text>
+                                        <View style={styles.leaderboardItem}>
+                                            <Text style={styles.leaderboardRank}>{index + 1}</Text>
+                                            <Text style={styles.leaderboardName}>{item.username}</Text>
+                                            <Text style={styles.leaderboardScore}>
+                                                {item.stars} ⭐
+                                            </Text>
+                                        </View>
                                     </View>
                                 )}
                                 style={styles.leaderboardList}

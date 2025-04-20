@@ -69,18 +69,38 @@ const QuestionScreen = ({ route, navigation }) => {
     };
     const submitReport = async (time_taken, percentage) => {
         const correctAnswers = questions.filter((q) => q.isCorrect).length;
-        const score = (correctAnswers / questions.length) * 100;  // Calculate the score as a percentage
+        const score = (correctAnswers / questions.length) * 100;
 
+        // ⭐ Calculate stars based on percentage
+        let stars = 0;
+        if (score >= 90) {
+            stars = 3;
+        } else if (score >= 70) {
+            stars = 2;
+        } else if (score >= 50) {
+            stars = 1;
+        }
+
+        // 📝 Main report data
         const reportData = {
             username: userData.username,
-            score: percentage,  // Use the score as a percentage
+            score: percentage,
             subtopicId: subtopicId,
             examId: null,
-            time_taken: time_taken,  // Pass the calculated time_taken
+            time_taken: time_taken,
+        };
+
+        // 🏆 Leaderboard data
+        const leaderboardData = {
+            username: userData.username,
+            stars: stars,
+            class: userData.class,
+            last_practice: new Date().toISOString().split('T')[0], // Format: YYYY-MM-DD
         };
 
         try {
-            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/report', {
+            // Submit report data
+            const reportRes = await fetch('https://homeedu.fsdgroup.com.ng/api/report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -88,16 +108,34 @@ const QuestionScreen = ({ route, navigation }) => {
                 body: JSON.stringify(reportData),
             });
 
-            const data = await response.json();
-            if (data.status === 200) {
+            const reportResJson = await reportRes.json();
+            if (reportResJson.status === 200) {
                 console.log('Report submitted successfully');
             } else {
                 console.error('Failed to submit report');
             }
+
+            // Submit leaderboard data
+            const leaderboardRes = await fetch('https://homeedu.fsdgroup.com.ng/api/leaderboard', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(leaderboardData),
+            });
+
+            const leaderboardResJson = await leaderboardRes.json();
+            if (leaderboardResJson.status === 200) {
+                console.log('Leaderboard updated successfully');
+            } else {
+                console.error('Failed to update leaderboard');
+            }
+
         } catch (error) {
-            console.error('Error submitting report:', error);
+            console.error('Error submitting data:', error);
         }
     };
+
 
 
     const handleSubmit = async () => {
@@ -157,7 +195,7 @@ const QuestionScreen = ({ route, navigation }) => {
 
     const handleNextQuestion = () => {
         setShowNarrations(false);
-    
+
         if (currentIndex < questions.length - 1) {
             setCurrentIndex((prevIndex) => prevIndex + 1);
             setKey((prevKey) => prevKey + 1); // Change key to trigger full re-render
@@ -165,7 +203,7 @@ const QuestionScreen = ({ route, navigation }) => {
             computeResults(); // Calculate results when the last question is completed
         }
     };
-    
+
 
 
     const computeResults = () => {
@@ -204,21 +242,21 @@ const QuestionScreen = ({ route, navigation }) => {
 
     return (
         <ScrollView style={styles.container} key={key}>
-        
-          <View style={styles.topDiv}>
-            <View style={styles.tNav}>
-              <Text style={styles.title}>Questions for Subtopic: {subtopic}</Text>
-           </View>
-          </View>
 
-          <View style={styles.bottomDiv}></View>
+            <View style={styles.topDiv}>
+                <View style={styles.tNav}>
+                    <Text style={styles.title}>Questions for Subtopic: {subtopic}</Text>
+                </View>
+            </View>
+
+            <View style={styles.bottomDiv}></View>
             {questions.length > 0 && currentIndex < questions.length ? (
                 <View style={styles.questionContainer}>
                     <QuestionRenderer
                         question={questions[currentIndex]}
                         onAnswerSelected={handleAnswerSelected}
                     />
-    
+
                     {showNarrations ? (
                         <ScrollView style={styles.narrationContainer}>
                             {narrations[questions[currentIndex].QuestionId]?.map((item, idx) => {
@@ -331,10 +369,10 @@ const QuestionScreen = ({ route, navigation }) => {
                     </View>
                 </View>
             </Modal>
-        
+
         </ScrollView>
     );
-    
+
 
 };
 
@@ -344,20 +382,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#864af9', // Light gray background for consistency
         //padding: 16,
         overflow: 'scroll',
-       /* position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,*/
+        /* position: 'absolute',
+         top: 0,
+         left: 0,
+         right: 0,
+         bottom: 0,*/
     },
-    tNav:{
-      backgroundColor: '#fcfcfc',
-      padding: 8,
-      width: '100%',
-      borderBottomWidth: 1,
-      borderColor: '#fcfcfc',
-      //borderBottomEndRadius: 32,
-      //borderBottomLeftRadius: 32,
+    tNav: {
+        backgroundColor: '#fcfcfc',
+        padding: 8,
+        width: '100%',
+        borderBottomWidth: 1,
+        borderColor: '#fcfcfc',
+        //borderBottomEndRadius: 32,
+        //borderBottomLeftRadius: 32,
     },
     title: {
         fontSize: 20,
@@ -366,19 +404,19 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         textAlign: 'center',
         fontFamily: 'latto'
-       
+
     },
     topDiv: {
-      backgroundColor: '#fcfcfc', // Themed blue color
-      borderBottomLeftRadius: 16,
-      height: 100,
-      width: '100%',
-      textAlign: 'center',
-      marginBottom: 20,
-      borderBottomEndRadius: 16,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
+        backgroundColor: '#fcfcfc', // Themed blue color
+        borderBottomLeftRadius: 16,
+        height: 100,
+        width: '100%',
+        textAlign: 'center',
+        marginBottom: 20,
+        borderBottomEndRadius: 16,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
     /*bottomDiv: {
       backgroundColor: '#657af9', // Themed blue color
@@ -403,10 +441,10 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3, // Elevation for Android
         margin: 'auto',
-       /* position: 'absolute',
-        top: 150,
-        left: '50%',
-        transform: [{translateX: '-50%'}],*/
+        /* position: 'absolute',
+         top: 150,
+         left: '50%',
+         transform: [{translateX: '-50%'}],*/
         overflow: 'scroll',
     },
     narrationContainer: {
