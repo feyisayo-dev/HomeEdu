@@ -18,7 +18,7 @@ import { TextInput } from 'react-native';
 import { useUser } from '../context/UserContext';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
-
+import { Picker } from '@react-native-picker/picker';
 const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
     const [streaks, setStreaks] = useState(0);
@@ -37,8 +37,9 @@ const DashboardScreen = ({ route, navigation }) => {
     const [tempEmail, setTempEmail] = useState(userData.email);
     const [isEditingPhone, setIsEditingPhone] = useState(false);
     const [tempPhone, setTempPhone] = useState(userData.phoneNumber);
-    const [isEditingClass, setIsEditingClass] = useState(false);
+    const [availableClasses, setAvailableClasses] = useState([]);
     const [tempClass, setTempClass] = useState(userData.class);
+    const [isEditingClass, setIsEditingClass] = useState(false);
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [tempAvatar, setTempAvatar] = useState(userData.avatar);
 
@@ -78,6 +79,26 @@ const DashboardScreen = ({ route, navigation }) => {
 
         fetchSubjects();
     }, [userData.class]);
+
+    useEffect(() => {
+        // Fetch classes from API
+        const fetchClasses = async () => {
+            try {
+                const response = await fetch("https://homeedu.fsdgroup.com.ng/api/fetchAllClasses");
+                const data = await response.json();
+                console.log("This is the data gotten from backend", data)
+                if (data.status === 200) {
+                    setAvailableClasses(data.Classes);
+                } else {
+                    console.error("Failed to fetch classes");
+                }
+            } catch (error) {
+                console.error("Error fetching classes:", error);
+            }
+        };
+
+        fetchClasses();
+    }, []);
 
     useEffect(() => {
         const fetchReports = async () => {
@@ -301,14 +322,42 @@ const DashboardScreen = ({ route, navigation }) => {
         }
     };
     const uploadProfileImage = async (image) => {
+        if (!userData.username || !image || !image.uri || !image.type) {
+            console.error("Validation failed:", {
+                username: userData.username,
+                image,
+            });
+            alert("Missing username or image data. Please try again.");
+            return;
+        }
+
         const formData = new FormData();
 
-        formData.append('username', userData.username);
+        formData.append('username', userData.username); // ✅ Ensure this is not undefined
+        // Extract the file name from the URI
+        const fileName = image.uri.split('/').pop(); // e.g., 'photo123.jpg'
+
+        // Optional: determine the MIME type (basic)
+        const fileType = image.type || 'image/jpeg';
+
+        console.log('Uploading image with name:', fileName);
+
         formData.append('profile_image', {
             uri: image.uri,
-            name: 'profile.jpg',
-            type: 'image/jpeg',
+            name: fileName,
+            type: fileType,
         });
+
+        for (let [key, value] of formData.entries()) {
+            if (typeof value === 'object' && value !== null) {
+                console.log(`${key}:`);
+                console.log('  name:', value.name);
+                console.log('  type:', value.type);
+                console.log('  uri:', value.uri);
+            } else {
+                console.log(`${key}: ${value}`);
+            }
+        }
 
         try {
             const response = await fetch('https://homeedu.fsdgroup.com.ng/api/EditProfileImage', {
@@ -321,17 +370,18 @@ const DashboardScreen = ({ route, navigation }) => {
 
             const data = await response.json();
             if (response.ok && data.status === 200) {
+                alert('Profile image updated!');
                 setUserData(prev => ({ ...prev, avatar: data.profile_image }));
-                alert('Profile picture updated!');
             } else {
-                alert('Failed to update profile picture');
                 console.log(data);
+                alert('Failed to update image: ' + (data.message || ''));
             }
         } catch (error) {
             console.error(error);
-            alert('Error uploading image');
+            alert('Network or upload error');
         }
     };
+
 
     const sections = [
         { type: 'info' },
@@ -706,17 +756,29 @@ const DashboardScreen = ({ route, navigation }) => {
                         <View style={styles.inputRow}>
                             <Text style={styles.modalLabel}>Class:</Text>
                             <View style={styles.inputContainer}>
-                                <TextInput
-                                    style={styles.modalInput}
-                                    value={tempClass}
-                                    editable={isEditingClass}
-                                    onChangeText={setTempClass}
-                                />
+                                {isEditingClass ? (
+                                    <Picker
+                                        selectedValue={tempClass}
+                                        style={styles.modalInput}
+                                        onValueChange={(itemValue) => setTempClass(itemValue)}
+                                    >
+                                        <Picker.Item label="Select a class" value="" />
+                                        {availableClasses.map((classItem) => (
+                                            <Picker.Item key={classItem.id} label={classItem.ClassName} value={classItem.ClassName} />
+                                        ))}
+                                    </Picker>
+                                ) : (
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        value={tempClass}
+                                        editable={false}
+                                    />
+                                )}
                                 <TouchableOpacity
                                     style={styles.editIcon}
                                     onPress={() => {
                                         if (isEditingClass) {
-                                            saveClass();
+                                            saveClass(); // your save logic
                                         } else {
                                             setIsEditingClass(true);
                                         }
@@ -730,6 +792,7 @@ const DashboardScreen = ({ route, navigation }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
+
 
 
                         <View style={styles.buttonRow}>
@@ -923,7 +986,7 @@ const styles = StyleSheet.create({
         fontFamily: 'latto',
     },
     activeTabText: {
-        color: white, // Highlight color for active tab
+        color: "white", // Highlight color for active tab
         fontWeight: 'bold',
         fontFamily: 'latto',
     },
