@@ -16,6 +16,9 @@ import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { TextInput } from 'react-native';
 import { useUser } from '../context/UserContext';
+import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
+
 const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
     const [streaks, setStreaks] = useState(0);
@@ -28,7 +31,16 @@ const DashboardScreen = ({ route, navigation }) => {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [tempFullName, setTempFullName] = useState(userData.fullName);
-
+    const [isEditingUsername, setIsEditingUsername] = useState(false);
+    const [tempUsername, setTempUsername] = useState(userData.username);
+    const [isEditingEmail, setIsEditingEmail] = useState(false);
+    const [tempEmail, setTempEmail] = useState(userData.email);
+    const [isEditingPhone, setIsEditingPhone] = useState(false);
+    const [tempPhone, setTempPhone] = useState(userData.phoneNumber);
+    const [isEditingClass, setIsEditingClass] = useState(false);
+    const [tempClass, setTempClass] = useState(userData.class);
+    const [isEditingAvatar, setIsEditingAvatar] = useState(false);
+    const [tempAvatar, setTempAvatar] = useState(userData.avatar);
 
 
     const [subjects, setSubjects] = useState([]);
@@ -157,10 +169,10 @@ const DashboardScreen = ({ route, navigation }) => {
             // Save name
             try {
                 const formData = new FormData();
-                formData.append('name', tempFullName);
+                formData.append('fullname', tempFullName);
                 formData.append('username', userData.username);
 
-                const response = await fetch('http://localhost:3000/editname', {
+                const response = await fetch('https://homeedu.fsdgroup.com.ng/api/editname', {
                     method: 'POST',
                     body: formData,
                 });
@@ -180,7 +192,146 @@ const DashboardScreen = ({ route, navigation }) => {
             setIsEditingName(true);
         }
     };
+    const saveUsername = async () => {
+        const formData = new FormData();
+        formData.append('old_username', userData.username);
+        formData.append('new_username', tempUsername);
 
+        try {
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/editusername', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                setUserData({ ...userData, username: tempUsername });
+                setIsEditingUsername(false);
+            } else {
+                alert('Failed to update username');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error updating username');
+        }
+    };
+    const saveEmail = async () => {
+        const formData = new FormData();
+        formData.append('username', userData.username); // or any unique ID
+        formData.append('email', tempEmail);
+
+        try {
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/editemail', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                setUserData({ ...userData, email: tempEmail });
+                setIsEditingEmail(false);
+            } else {
+                alert('Failed to update email');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error updating email');
+        }
+    };
+
+    const savePhone = async () => {
+        const formData = new FormData();
+        formData.append('username', userData.username); // or your unique ID
+        formData.append('phone', tempPhone);
+
+        try {
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/editphone', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                setUserData({ ...userData, phoneNumber: tempPhone });
+                setIsEditingPhone(false);
+            } else {
+                alert('Failed to update phone number');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error updating phone number');
+        }
+    };
+    const saveClass = async () => {
+        const formData = new FormData();
+        formData.append('username', userData.username); // assuming username identifies the user
+        formData.append('class', tempClass);
+
+        try {
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/editclass', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                setUserData({ ...userData, class: tempClass });
+                setIsEditingClass(false);
+            } else {
+                alert('Failed to update class');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error updating class');
+        }
+    };
+
+    const pickImage = async () => {
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (permissionResult.granted === false) {
+            alert("Permission to access gallery is required!");
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 1,
+        });
+
+        if (!result.cancelled) {
+            uploadProfileImage(result.assets[0]); // for Expo SDK 48+
+        }
+    };
+    const uploadProfileImage = async (image) => {
+        const formData = new FormData();
+
+        formData.append('username', userData.username);
+        formData.append('profile_image', {
+            uri: image.uri,
+            name: 'profile.jpg',
+            type: 'image/jpeg',
+        });
+
+        try {
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/EditProfileImage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+                body: formData,
+            });
+
+            const data = await response.json();
+            if (response.ok && data.status === 200) {
+                setUserData(prev => ({ ...prev, avatar: data.profile_image }));
+                alert('Profile picture updated!');
+            } else {
+                alert('Failed to update profile picture');
+                console.log(data);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error uploading image');
+        }
+    };
 
     const sections = [
         { type: 'info' },
@@ -442,7 +593,9 @@ const DashboardScreen = ({ route, navigation }) => {
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Your Profile</Text>
 
-                        <Image source={{ uri: userData.avatar }} style={styles.modalAvatar} />
+                        <TouchableOpacity onPress={pickImage}>
+                            <Image source={{ uri: userData.avatar }} style={styles.modalAvatar} />
+                        </TouchableOpacity>
 
                         <View style={styles.inputRow}>
                             <Text style={styles.modalLabel}>Full Name:</Text>
@@ -469,11 +622,25 @@ const DashboardScreen = ({ route, navigation }) => {
                             <View style={styles.inputContainer}>
                                 <TextInput
                                     style={styles.modalInput}
-                                    value={userData.username}
-                                    editable={false} // Set to true if you want to allow editing
+                                    value={tempUsername}
+                                    editable={isEditingUsername}
+                                    onChangeText={setTempUsername}
                                 />
-                                <TouchableOpacity style={styles.editIcon}>
-                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                <TouchableOpacity
+                                    style={styles.editIcon}
+                                    onPress={() => {
+                                        if (isEditingUsername) {
+                                            saveUsername();
+                                        } else {
+                                            setIsEditingUsername(true);
+                                        }
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={isEditingUsername ? 'checkmark' : 'pencil'}
+                                        size={18}
+                                        color="#864AF9"
+                                    />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -483,25 +650,55 @@ const DashboardScreen = ({ route, navigation }) => {
                             <View style={styles.inputContainer}>
                                 <TextInput
                                     style={styles.modalInput}
-                                    value={userData.email}
-                                    editable={false} // Set to true if you want to allow editing
+                                    value={tempEmail}
+                                    editable={isEditingEmail}
+                                    onChangeText={setTempEmail}
                                 />
-                                <TouchableOpacity style={styles.editIcon}>
-                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                <TouchableOpacity
+                                    style={styles.editIcon}
+                                    onPress={() => {
+                                        if (isEditingEmail) {
+                                            saveEmail();
+                                        } else {
+                                            setIsEditingEmail(true);
+                                        }
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={isEditingEmail ? 'checkmark' : 'pencil'}
+                                        size={18}
+                                        color="#864AF9"
+                                    />
                                 </TouchableOpacity>
                             </View>
                         </View>
+
 
                         <View style={styles.inputRow}>
                             <Text style={styles.modalLabel}>Phone:</Text>
                             <View style={styles.inputContainer}>
                                 <TextInput
                                     style={styles.modalInput}
-                                    value={userData.phoneNumber}
-                                    editable={false} // Set to true if you want to allow editing
+                                    value={tempPhone}
+                                    editable={isEditingPhone}
+                                    onChangeText={setTempPhone}
+                                    keyboardType="phone-pad"
                                 />
-                                <TouchableOpacity style={styles.editIcon}>
-                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                <TouchableOpacity
+                                    style={styles.editIcon}
+                                    onPress={() => {
+                                        if (isEditingPhone) {
+                                            savePhone();
+                                        } else {
+                                            setIsEditingPhone(true);
+                                        }
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={isEditingPhone ? 'checkmark' : 'pencil'}
+                                        size={18}
+                                        color="#864AF9"
+                                    />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -511,14 +708,29 @@ const DashboardScreen = ({ route, navigation }) => {
                             <View style={styles.inputContainer}>
                                 <TextInput
                                     style={styles.modalInput}
-                                    value={userData.class}
-                                    editable={false} // Set to true if you want to allow editing
+                                    value={tempClass}
+                                    editable={isEditingClass}
+                                    onChangeText={setTempClass}
                                 />
-                                <TouchableOpacity style={styles.editIcon}>
-                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                <TouchableOpacity
+                                    style={styles.editIcon}
+                                    onPress={() => {
+                                        if (isEditingClass) {
+                                            saveClass();
+                                        } else {
+                                            setIsEditingClass(true);
+                                        }
+                                    }}
+                                >
+                                    <Ionicons
+                                        name={isEditingClass ? 'checkmark' : 'pencil'}
+                                        size={18}
+                                        color="#864AF9"
+                                    />
                                 </TouchableOpacity>
                             </View>
                         </View>
+
 
                         <View style={styles.buttonRow}>
                             <TouchableOpacity
