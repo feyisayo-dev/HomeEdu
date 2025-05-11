@@ -68,39 +68,17 @@ const QuestionScreen = ({ route, navigation }) => {
         }));
     };
     const submitReport = async (time_taken, percentage) => {
-        const correctAnswers = questions.filter((q) => q.isCorrect).length;
-        const score = (correctAnswers / questions.length) * 100;
-
-        // ⭐ Calculate stars based on percentage
-        let stars = 0;
-        if (score >= 90) {
-            stars = 3;
-        } else if (score >= 70) {
-            stars = 2;
-        } else if (score >= 50) {
-            stars = 1;
-        }
-
-        // 📝 Main report data
         const reportData = {
             username: userData.username,
             score: percentage,
             subtopicId: subtopicId,
             examId: null,
             time_taken: time_taken,
-        };
-
-        // 🏆 Leaderboard data
-        const leaderboardData = {
-            username: userData.username,
-            stars: stars,
-            class: userData.class,
-            last_practice: new Date().toISOString().split('T')[0], // Format: YYYY-MM-DD
+            class: userData.class, // ✅ Required for leaderboard update on backend
         };
 
         try {
-            // Submit report data
-            const reportRes = await fetch('https://homeedu.fsdgroup.com.ng/api/report', {
+            const res = await fetch('https://homeedu.fsdgroup.com.ng/api/report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -108,33 +86,18 @@ const QuestionScreen = ({ route, navigation }) => {
                 body: JSON.stringify(reportData),
             });
 
-            const reportResJson = await reportRes.json();
-            if (reportResJson.status === 200) {
-                console.log('Report submitted successfully');
+            const resJson = await res.json();
+            if (resJson.status === 200) {
+                console.log('Report submitted successfully and leaderboard updated');
             } else {
-                console.error('Failed to submit report');
-            }
-
-            // Submit leaderboard data
-            const leaderboardRes = await fetch('https://homeedu.fsdgroup.com.ng/api/leaderboard', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(leaderboardData),
-            });
-
-            const leaderboardResJson = await leaderboardRes.json();
-            if (leaderboardResJson.status === 200) {
-                console.log('Leaderboard updated successfully');
-            } else {
-                console.error('Failed to update leaderboard');
+                console.error('Failed to submit report:', resJson.message);
             }
 
         } catch (error) {
-            console.error('Error submitting data:', error);
+            console.error('Error submitting report:', error);
         }
     };
+
 
 
 

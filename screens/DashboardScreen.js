@@ -26,6 +26,10 @@ const DashboardScreen = ({ route, navigation }) => {
     const [activeTab, setActiveTab] = useState('recent');
     const [modalVisible, setModalVisible] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [tempFullName, setTempFullName] = useState(userData.fullName);
+
+
 
     const [subjects, setSubjects] = useState([]);
     useEffect(() => {
@@ -35,32 +39,6 @@ const DashboardScreen = ({ route, navigation }) => {
             setUserData(data); // Save it to context
         }
     }, [userData, setUserData]);
-
-    useEffect(() => {
-        // Fetch leaderboard based on the subjectId
-        const fetchLeaderboard = async () => {
-            try {
-                const formData = new FormData();
-                formData.append('class', userData.class);  // E.g. "Grade 1"
-
-                const response = await axios.post('https://homeedu.fsdgroup.com.ng/api/getleaderboard', formData);
-                if (response.data.status === 200) {
-                    console.log("This is leaderboard for class", userData.class, ",", response.data.data);
-                    setLeaderboard(response.data.data);
-                } else {
-                    setError("Failed to load leaderboard.");
-                }
-            } catch (err) {
-                setError("An error occurred while fetching topics.");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-
-        fetchLeaderboard();
-    }, [userData.class]);
-
 
     useEffect(() => {
         const fetchSubjects = async () => {
@@ -128,6 +106,37 @@ const DashboardScreen = ({ route, navigation }) => {
             fetchStreaks();
         }, [userData])
     );
+    useEffect(() => {
+        const fetchLeaderboard = async () => {
+            try {
+                console.log("Fetching leaderboard...");
+                const formData = new FormData();
+                formData.append('class', userData.class);
+
+                const response = await fetch('https://homeedu.fsdgroup.com.ng/api/getleaderboard', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const json = await response.json();
+                console.log("Fetched leaderboard response:", json);
+
+                if (json.status === 200) {
+                    setLeaderboard(json.data);
+                } else {
+                    setError("Failed to load leaderboard.");
+                }
+            } catch (error) {
+                console.error("Fetch leaderboard error:", error);
+                setError("Network error. Please check your internet or server.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+
+        fetchLeaderboard();
+    }, [userData.class]);
 
     const generateClassTimes = () => {
         const currentDay = new Date().getDay(); // 0 = Sunday, 6 = Saturday
@@ -141,6 +150,37 @@ const DashboardScreen = ({ route, navigation }) => {
             return ['3:30 PM - 4:30 PM', '6:00 PM - 7:00 PM', '8:00 PM - 9:00 PM'];
         }
     };
+
+
+    const toggleEditName = async () => {
+        if (isEditingName) {
+            // Save name
+            try {
+                const formData = new FormData();
+                formData.append('name', tempFullName);
+                formData.append('username', userData.username);
+
+                const response = await fetch('http://localhost:3000/editname', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.status === 200) {
+                    setUserData({ ...userData, fullName: tempFullName });
+                    setIsEditingName(false);
+                } else {
+                    alert('Failed to update name');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error saving name');
+            }
+        } else {
+            // Enter edit mode
+            setIsEditingName(true);
+        }
+    };
+
 
     const sections = [
         { type: 'info' },
@@ -409,14 +449,20 @@ const DashboardScreen = ({ route, navigation }) => {
                             <View style={styles.inputContainer}>
                                 <TextInput
                                     style={styles.modalInput}
-                                    value={userData.fullName}
-                                    editable={false} // Set to true if you want to allow editing
+                                    value={tempFullName}
+                                    onChangeText={setTempFullName}
+                                    editable={isEditingName}
                                 />
-                                <TouchableOpacity style={styles.editIcon}>
-                                    <Ionicons name="pencil" size={18} color="#864AF9" />
+                                <TouchableOpacity style={styles.editIcon} onPress={toggleEditName}>
+                                    <Ionicons
+                                        name={isEditingName ? "checkmark" : "pencil"}
+                                        size={18}
+                                        color="#864AF9"
+                                    />
                                 </TouchableOpacity>
                             </View>
                         </View>
+
 
                         <View style={styles.inputRow}>
                             <Text style={styles.modalLabel}>Username:</Text>
@@ -665,7 +711,7 @@ const styles = StyleSheet.create({
         fontFamily: 'latto',
     },
     activeTabText: {
-        color: '#864af9', // Highlight color for active tab
+        color: white, // Highlight color for active tab
         fontWeight: 'bold',
         fontFamily: 'latto',
     },
