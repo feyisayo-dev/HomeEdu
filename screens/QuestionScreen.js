@@ -16,7 +16,7 @@ const QuestionScreen = ({ route, navigation }) => {
     const [results, setResults] = useState(null); // Track results
     const [showNarrations, setShowNarrations] = useState(false); // Show narrations toggle
     const [isModalVisible, setIsModalVisible] = useState(false);
-    const { subtopicId, subtopic } = route.params;
+    const { subtopicId, subtopic, selectedSubjects } = route.params;
 
 
     let startTime;
@@ -37,9 +37,12 @@ const QuestionScreen = ({ route, navigation }) => {
         }
 
         const fetchQuestions = async () => {
+            if (userData.class === "JAMB") {
             try {
-                const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/questions/${subtopicId}`, {
+                const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/ExamQuestions`, {
                     class: userData.class,
+                    total_questions: 200,
+                    JAMB_SUBJECT: selectedSubjects,
                 });
 
                 const apiData = response.data.data || [];
@@ -54,6 +57,26 @@ const QuestionScreen = ({ route, navigation }) => {
                 setQuestions([]);
             } finally {
                 setLoading(false);
+            }
+            } else {
+                try {
+                    const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/questions/${subtopicId}`, {
+                        class: userData.class,
+                    });
+
+                    const apiData = response.data.data || [];
+                    const parsedQuestions = apiData.map((q) => ({
+                        ...q,
+                        options: q.options ? JSON.parse(q.options) : null,
+                    }));
+                    console.log("This is the parsedQuestions", parsedQuestions);
+                    setQuestions(parsedQuestions);
+                } catch (error) {
+                    console.error('Error fetching questions:', error);
+                    setQuestions([]);
+                } finally {
+                    setLoading(false);
+                }
             }
         };
 

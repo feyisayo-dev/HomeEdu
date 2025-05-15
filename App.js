@@ -13,6 +13,7 @@ import SubtopicScreen from './screens/SubtopicScreen';
 import 'react-native-gesture-handler';
 import ExplanationScreen from './screens/ExplanationScreen';
 import ExampleScreen from './screens/ExampleScreen';
+import JambScreen from './screens/JambScreen';
 
 
 const Stack = createStackNavigator();
@@ -22,16 +23,39 @@ export default function App() {
     <UserProvider>
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Home">
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="Dashboard" component={DashboardScreen} />
-          <Stack.Screen name="Subject" component={SubjectScreen} />
-          <Stack.Screen name="Topic" component={TopicScreen} />
-          <Stack.Screen name="Explanation" component={ExplanationScreen} />
-          <Stack.Screen name="Example" component={ExampleScreen} />
-          <Stack.Screen name="Subtopic" component={SubtopicScreen} />
-          <Stack.Screen name="Question" component={QuestionScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Login" component={LoginScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Register" component={RegisterScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Dashboard" component={DashboardScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Subject" component={SubjectScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Topic" component={TopicScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Explanation" component={ExplanationScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Example" component={ExampleScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Subtopic" component={SubtopicScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Question" component={QuestionScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="JAMB" component={JambScreen} options={{
+            headerShown: false
+          }} />
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>

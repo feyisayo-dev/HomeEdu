@@ -3,13 +3,14 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, ImageBackground, Imag
 import axios from 'axios';
 import { UserContext } from '../context/UserContext';
 import { ActivityIndicator } from 'react-native';
-
+import { Ionicons } from "@expo/vector-icons";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { setUserData } = useContext(UserContext); // Access the context
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     setLoading(true);
@@ -55,14 +56,20 @@ export default function LoginScreen({ navigation }) {
           onChangeText={setEmail}
           placeholderTextColor="#666666"
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          placeholderTextColor="#666666"
-        />
+        <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 5, paddingHorizontal: 10 }}>
+          <TextInput
+            style={{ flex: 1, paddingVertical: 10 }}
+            placeholder="Password"
+            secureTextEntry={!showPassword} // Toggle visibility
+            value={password}
+            onChangeText={setPassword}
+            placeholderTextColor="#666666"
+          />
+
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <Ionicons name={showPassword ? "eye" : "eye-off"} size={24} color="gray" />
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity onPress={handleLogin} style={styles.btn} disabled={loading}>
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />

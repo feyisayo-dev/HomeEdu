@@ -59,11 +59,27 @@ const SubjectScreen = ({ navigation }) => {
     );
   }
 
+  const handleButtonPress = () => {
+    navigation.navigate('JAMB', { userData });
+  }
   return (
     <View style={styles.subjectSelectionContainer}>
-      <Text style={styles.subjectSelectionTitle}>
-        Subjects for Class {userData.class}
-      </Text>
+      {userData.class === 'JAMB' ? (
+        <View style={styles.headerRow}>
+          <Text style={styles.subjectSelectionTitleWithButton}>
+            Subjects for Class {userData.class}
+          </Text>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={handleButtonPress}>
+            <Text style={styles.headerButtonText}>Take Exam</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.subjectSelectionTitle}>
+          Subjects for Class {userData.class}
+        </Text>
+      )}
       <FlatList
         data={subjects}
         keyExtractor={(item) => item.SubjectId.toString()}
@@ -99,6 +115,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4f4f4', // Light gray background
     padding: 16,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
   subjectSelectionTitle: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -107,6 +130,26 @@ const styles = StyleSheet.create({
     textAlign: 'center', // Center-align the title
     fontFamily: 'latto',
   },
+  subjectSelectionTitleWithButton: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#864af9',
+    fontFamily: 'latto',
+  },
+
+  headerButton: {
+    backgroundColor: '#864af9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+
+  headerButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   subjectList: {
     paddingBottom: 16,
     display: 'flex',

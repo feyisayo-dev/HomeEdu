@@ -5,6 +5,7 @@ import {
     View,
     Button,
     Text,
+    RefreshControl,
     Modal,
     TouchableOpacity,
     FlatList,
@@ -19,6 +20,10 @@ import { useUser } from '../context/UserContext';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+import { Alert } from 'react-native';
+
 const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
     const [streaks, setStreaks] = useState(0);
@@ -42,7 +47,7 @@ const DashboardScreen = ({ route, navigation }) => {
     const [isEditingClass, setIsEditingClass] = useState(false);
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [tempAvatar, setTempAvatar] = useState(userData.avatar);
-
+    const [refreshing, setRefreshing] = useState(false);
 
     const [subjects, setSubjects] = useState([]);
     useEffect(() => {
@@ -53,71 +58,86 @@ const DashboardScreen = ({ route, navigation }) => {
         }
     }, [userData, setUserData]);
 
-    useEffect(() => {
-        const fetchSubjects = async () => {
-            try {
-                console.log('This is class', userData.class);
-                console.log("This is the userData", userData)
+    const fetchSubjects = async () => {
+        try {
+            console.log('This is class', userData.class);
 
-                const response = await axios.post(
-                    'https://homeedu.fsdgroup.com.ng/api/subjects',
-                    {
-                        class: userData.class,
-                    }
-                );
-                if (response.data.status === 200) {
-                    setSubjects(response.data.data);
-                } else {
-                    setError('Failed to load subjects.');
-                }
-            } catch (err) {
-                setError('An error occurred while fetching subjects.');
-            } finally {
-                setLoading(false);
+            const response = await axios.post(
+                'https://homeedu.fsdgroup.com.ng/api/subjects',
+                { class: userData.class }
+            );
+
+            if (response.data.status === 200) {
+                setSubjects(response.data.data);
+                console.log("Fetched subjects response:", response.data);
+            } else {
+                // Handle unexpected success response structure
+                setSubjects([]);
+                setError('No subjects found.');
             }
-        };
+
+        } catch (err) {
+            // Handle 404 or any other HTTP error
+            if (err.response?.status === 404) {
+                setSubjects([]); // Set to empty if not found
+            } else {
+                setError('An error occurred while fetching subjects.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
 
         fetchSubjects();
     }, [userData.class]);
+    const fetchClasses = async () => {
+        try {
+            const response = await fetch("https://homeedu.fsdgroup.com.ng/api/fetchAllClasses");
+            const data = await response.json();
+            console.log("This is the data gotten from backend", data)
+            if (data.status === 200) {
+                setAvailableClasses(data.Classes);
+            } else {
+                console.error("Failed to fetch classes");
+            }
+        } catch (error) {
+            console.error("Error fetching classes:", error);
+        }
+    };
 
     useEffect(() => {
-        // Fetch classes from API
-        const fetchClasses = async () => {
-            try {
-                const response = await fetch("https://homeedu.fsdgroup.com.ng/api/fetchAllClasses");
-                const data = await response.json();
-                console.log("This is the data gotten from backend", data)
-                if (data.status === 200) {
-                    setAvailableClasses(data.Classes);
-                } else {
-                    console.error("Failed to fetch classes");
-                }
-            } catch (error) {
-                console.error("Error fetching classes:", error);
-            }
-        };
-
         fetchClasses();
     }, []);
+    const fetchReports = async () => {
+        try {
+            const response = await axios.get(
+                `https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`
+            );
+
+            if (response.data.status === 200) {
+                setReports(response.data.data);
+                console.log("This is the report data", response.data);
+            } else {
+                setReports([]);
+                setError('No reports found.');
+            }
+
+        } catch (err) {
+            if (err.response?.status === 404) {
+                setReports([]); // Clear reports if not found
+            } else {
+                setError('An error occurred while fetching reports.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
 
     useEffect(() => {
-        const fetchReports = async () => {
-            try {
-                const response = await axios.get(
-                    `https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`
-                );
-                if (response.data.status === 200) {
-                    setReports(response.data.data);
-                } else {
-                    setError('No reports found.');
-                }
-            } catch (err) {
-                setError('An error occurred while fetching reports.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchReports();
     }, [userData.username]);
 
@@ -139,35 +159,36 @@ const DashboardScreen = ({ route, navigation }) => {
             fetchStreaks();
         }, [userData])
     );
-    useEffect(() => {
-        const fetchLeaderboard = async () => {
-            try {
-                console.log("Fetching leaderboard...");
-                const formData = new FormData();
-                formData.append('class', userData.class);
 
-                const response = await fetch('https://homeedu.fsdgroup.com.ng/api/getleaderboard', {
-                    method: 'POST',
-                    body: formData,
-                });
+    const fetchLeaderboard = async () => {
+        try {
+            console.log("Fetching leaderboard...");
+            const formData = new FormData();
+            formData.append('class', userData.class);
 
-                const json = await response.json();
-                console.log("Fetched leaderboard response:", json);
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/getleaderboard', {
+                method: 'POST',
+                body: formData,
+            });
 
-                if (json.status === 200) {
-                    setLeaderboard(json.data);
-                } else {
-                    setError("Failed to load leaderboard.");
-                }
-            } catch (error) {
-                console.error("Fetch leaderboard error:", error);
-                setError("Network error. Please check your internet or server.");
-            } finally {
-                setLoading(false);
+            const json = await response.json();
+            console.log("Fetched leaderboard response:", json);
+
+            if (json.status === 200) {
+                setLeaderboard(json.data);
+            } else if (json.status === 404) {
+                setLeaderboard([]); // Empty leaderboard if not found
+            } else {
+                setError("Failed to load leaderboard.");
             }
-        };
+        } catch (error) {
+            setError('An error occurred while fetching leaderboard.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-
+    useEffect(() => {
         fetchLeaderboard();
     }, [userData.class]);
 
@@ -201,6 +222,7 @@ const DashboardScreen = ({ route, navigation }) => {
                 if (response.status === 200) {
                     setUserData({ ...userData, fullName: tempFullName });
                     setIsEditingName(false);
+                    alert('Name updated successfully!');
                 } else {
                     alert('Failed to update name');
                 }
@@ -215,26 +237,34 @@ const DashboardScreen = ({ route, navigation }) => {
     };
     const saveUsername = async () => {
         const formData = new FormData();
-        formData.append('old_username', userData.username);
-        formData.append('new_username', tempUsername);
+        formData.append("old_username", userData.username);
+        formData.append("new_username", tempUsername);
 
         try {
-            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/editusername', {
-                method: 'POST',
+            const response = await fetch("https://homeedu.fsdgroup.com.ng/api/editusername", {
+                method: "POST",
                 body: formData,
             });
 
-            if (response.ok) {
+            const data = await response.json(); // Parse JSON response
+
+            if (response.ok && data.status === 200) {
+                // Username updated successfully
                 setUserData({ ...userData, username: tempUsername });
                 setIsEditingUsername(false);
+                alert("Username updated successfully!");
+            } else if (data.status === 101) {
+                // Username already exists
+                alert("Username already taken. Please choose a different one.");
             } else {
-                alert('Failed to update username');
+                alert("Failed to update username: " + (data.message || ""));
             }
         } catch (error) {
             console.error(error);
-            alert('Error updating username');
+            alert("Network error or issue updating username.");
         }
     };
+
     const saveEmail = async () => {
         const formData = new FormData();
         formData.append('username', userData.username); // or any unique ID
@@ -249,6 +279,9 @@ const DashboardScreen = ({ route, navigation }) => {
             if (response.ok) {
                 setUserData({ ...userData, email: tempEmail });
                 setIsEditingEmail(false);
+                alert('Email updated successfully!');
+            } else if (response.status === 101) {
+                alert('Email already in use by another user. Please choose a different one.');
             } else {
                 alert('Failed to update email');
             }
@@ -272,6 +305,7 @@ const DashboardScreen = ({ route, navigation }) => {
             if (response.ok) {
                 setUserData({ ...userData, phoneNumber: tempPhone });
                 setIsEditingPhone(false);
+                alert('Phone number updated successfully!');
             } else {
                 alert('Failed to update phone number');
             }
@@ -294,6 +328,7 @@ const DashboardScreen = ({ route, navigation }) => {
             if (response.ok) {
                 setUserData({ ...userData, class: tempClass });
                 setIsEditingClass(false);
+                alert('Class updated successfully!');
             } else {
                 alert('Failed to update class');
             }
@@ -321,8 +356,21 @@ const DashboardScreen = ({ route, navigation }) => {
             uploadProfileImage(result.assets[0]); // for Expo SDK 48+
         }
     };
+
+    const compressImage = async (imageUri) => {
+        const result = await ImageManipulator.manipulateAsync(
+            imageUri,
+            [],
+            {
+                compress: 0.5, // adjust compression here
+                format: ImageManipulator.SaveFormat.JPEG,
+            }
+        );
+        return result;
+    };
+
     const uploadProfileImage = async (image) => {
-        if (!userData.username || !image || !image.uri || !image.type) {
+        if (!userData.username || !image || !image.uri) {
             console.error("Validation failed:", {
                 username: userData.username,
                 image,
@@ -331,47 +379,116 @@ const DashboardScreen = ({ route, navigation }) => {
             return;
         }
 
+        let fileSize = image.size;
+        if (!fileSize) {
+            const fileInfo = await FileSystem.getInfoAsync(image.uri);
+            fileSize = fileInfo.size;
+        }
+        console.log('File size:', fileSize);
+        const fileName = image.uri.split('/').pop();
+
+        let fileType = 'image/jpeg'; // default
+
+        if (fileName.endsWith('.png')) fileType = 'image/png';
+        else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) fileType = 'image/jpeg';
+        else if (fileName.endsWith('.gif')) fileType = 'image/gif';
+        else if (fileName.endsWith('.webp')) fileType = 'image/webp';
+
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(fileType)) {
+            alert('Unsupported image type: ' + fileType + '\nSupported types: ' + allowedTypes.join(', '));
+            return;
+        } else {
+            console.log('Image type is supported:', fileType);
+        }
+
+        // ✅ File size check
+        if (fileSize > 1 * 1024 * 1024) {
+            Alert.alert(
+                'Image too large',
+                'The selected image is over 1MB. Do you want to compress it?',
+                [
+                    {
+                        text: 'Choose another',
+                        onPress: () => console.log('User canceled'),
+                        style: 'cancel',
+                    },
+                    {
+                        text: 'Compress & Continue',
+                        onPress: async () => {
+                            try {
+                                const compressed = await ImageManipulator.manipulateAsync(
+                                    image.uri,
+                                    [],
+                                    {
+                                        compress: 0.5,
+                                        format: ImageManipulator.SaveFormat.JPEG,
+                                    }
+                                );
+
+                                const compressedInfo = await FileSystem.getInfoAsync(compressed.uri);
+
+                                if (compressedInfo.size > 20 * 1024 * 1024) { // Laravel max
+                                    Alert.alert(
+                                        'Still too large',
+                                        'Compressed image is still over 20MB. Please choose another image.'
+                                    );
+                                    return;
+                                }
+
+                                uploadProfileImage({
+                                    ...image,
+                                    uri: compressed.uri,
+                                    size: compressedInfo.size,
+                                });
+
+                            } catch (err) {
+                                console.error('Compression failed:', err);
+                                Alert.alert('Error', 'Could not compress the image.');
+                            }
+                        },
+                    },
+                ]
+            );
+            return;
+        }
+
+        const cleanUri = Platform.OS === 'ios' ? image.uri.replace('file://', '') : image.uri;
+
         const formData = new FormData();
-
-        formData.append('username', userData.username); // ✅ Ensure this is not undefined
-        // Extract the file name from the URI
-        const fileName = image.uri.split('/').pop(); // e.g., 'photo123.jpg'
-
-        // Optional: determine the MIME type (basic)
-        const fileType = image.type || 'image/jpeg';
-
-        console.log('Uploading image with name:', fileName);
-
-        formData.append('profile_image', {
-            uri: image.uri,
+        formData.append('username', userData.username);
+        formData.append("profile_image", {
+            uri: cleanUri,
             name: fileName,
             type: fileType,
         });
 
-        for (let [key, value] of formData.entries()) {
-            if (typeof value === 'object' && value !== null) {
-                console.log(`${key}:`);
-                console.log('  name:', value.name);
-                console.log('  type:', value.type);
-                console.log('  uri:', value.uri);
-            } else {
-                console.log(`${key}: ${value}`);
-            }
-        }
+        // Debug log
+        console.log("Uploading image:", {
+            uri: cleanUri,
+            name: fileName,
+            type: fileType,
+            size: fileSize
+        });
 
         try {
             const response = await fetch('https://homeedu.fsdgroup.com.ng/api/EditProfileImage', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'multipart/form-data',
+                    Accept: 'application/json',
                 },
                 body: formData,
             });
 
             const data = await response.json();
             if (response.ok && data.status === 200) {
+                const baseUrl = 'https://homeedu.fsdgroup.com.ng/storage/';
                 alert('Profile image updated!');
-                setUserData(prev => ({ ...prev, avatar: data.profile_image }));
+                setUserData(prev => ({
+                    ...prev,
+                    avatar: baseUrl + data.profile_image,
+                }));
+                console.log('Updated userData: avatar:' + baseUrl + data.profile_image);
             } else {
                 console.log(data);
                 alert('Failed to update image: ' + (data.message || ''));
@@ -382,6 +499,46 @@ const DashboardScreen = ({ route, navigation }) => {
         }
     };
 
+    const fetchRefreshedUser = async () => {
+        try {
+            console.log("fetching leaderboard...");
+            fetchLeaderboard();
+            console.log("fetching report...")
+            fetchReports();
+            console.log("fetching subject...")
+            fetchSubjects();
+            setRefreshing(true);
+            const response = await fetch('https://homeedu.fsdgroup.com.ng/api/refresh', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username: userData.username }),
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 200) {
+                const newAvatar = `${result.user.userData.avatar}?t=${new Date().getTime()}`;
+
+                setUserData(prev => ({
+                    ...prev,
+                    ...result.user.userData,
+                    avatar: newAvatar,
+                }));
+                console.log("User refreshed:", result.user.userData);
+            } else {
+                console.log(result);
+                Alert.alert('Error', result.message || 'Refresh failed');
+            }
+        } catch (error) {
+            console.error('Refresh error:', error);
+            Alert.alert('Error', 'Network issue during refresh');
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     const sections = [
         { type: 'info' },
@@ -391,7 +548,6 @@ const DashboardScreen = ({ route, navigation }) => {
         { type: 'leaderboard' },
         { type: 'subjects' },
     ];
-
     const renderItem = ({ item }) => {
         switch (item.type) {
             case 'info':
@@ -424,7 +580,7 @@ const DashboardScreen = ({ route, navigation }) => {
                         {loading ? (
                             <Text>Loading...</Text>
                         ) : error ? (
-                            <Text style={styles.error}>{error}</Text>
+                            <Text style={styles.noTimetableData}>{error}</Text>
                         ) : (
                             <>
                                 <FlatList
@@ -563,7 +719,7 @@ const DashboardScreen = ({ route, navigation }) => {
                         {loading ? (
                             <Text>Loading timetable...</Text>
                         ) : error ? (
-                            <Text style={styles.error}>{error}</Text>
+                            <Text style={styles.noTimetableData}>{error}</Text>
                         ) : subjects && subjects.length > 0 ? (
                             <FlatList
                                 data={subjects.slice(0, 3)} // Limit to 3 subjects
@@ -636,6 +792,14 @@ const DashboardScreen = ({ route, navigation }) => {
                 keyExtractor={(item, index) => index.toString()}
                 renderItem={renderItem}
                 contentContainerStyle={styles.container}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={fetchRefreshedUser}
+                        tintColor="#00ff00"
+                        colors={['#00ff00']}
+                    />
+                }
             />
 
             {showProfileModal && (

@@ -143,7 +143,7 @@ export default function RegisterScreen({ navigation }) {
       navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],
-    });
+      });
     } catch (error) {
       // Handle errors
       Alert.alert(
@@ -151,7 +151,7 @@ export default function RegisterScreen({ navigation }) {
         error.response?.data?.message || 'Registration failed'
       );
 
-      console.log("This is the error gotten",response.data.message)
+      console.log("This is the error gotten", response.data.message)
     }
   };
 
@@ -338,6 +338,10 @@ export default function RegisterScreen({ navigation }) {
               <Text style={styles.buttonText}>Register</Text>
             </TouchableOpacity>
           )}
+          <Text onPress={() => navigation.navigate('Login')
+          } style={styles.link}>
+            You have an account? <Text style={styles.LogLink}>Login here</Text>
+          </Text>
         </View>
       </View>
     </ImageBackground>
@@ -351,18 +355,18 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingLeft: 20,
     display: 'flex',
-   // alignItems: 'center',
+    // alignItems: 'center',
     justifyContent: 'center',
   },
   toptext: {
-   fontSize: 36,
-   fontWeight: 700,
-   color: '#fcfcfc'
+    fontSize: 36,
+    fontWeight: 700,
+    color: '#fcfcfc'
   },
   topsubtext: {
-   fontSize: 16,
-   fontWeight: 400,
-   color: '#cccccc'
+    fontSize: 16,
+    fontWeight: 400,
+    color: '#cccccc'
   },
   container: {
     flex: 1,
@@ -437,5 +441,8 @@ const styles = StyleSheet.create({
   dateButtonText: {
     color: 'white',
     fontSize: 16,
+  },
+  LogLink: {
+    color: '#864af9',
   },
 });

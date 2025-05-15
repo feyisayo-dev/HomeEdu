@@ -76,7 +76,12 @@ const ExampleScreen = ({ route, navigation }) => {
             <TouchableOpacity
                 style={styles.button}
                 onPress={() =>
-                    navigation.navigate('Question', { subtopicId, subtopic })
+                    navigation.navigate('Question', {
+                        subtopicId: subtopicId,
+                        subtopic: subtopic,
+                        selectedSubjects: null,
+                    })
+
                 }
             >
                 <Text style={styles.buttonText}>Next</Text>
