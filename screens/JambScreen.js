@@ -5,12 +5,15 @@ import {
     StyleSheet,
     TouchableOpacity,
     FlatList,
+    Alert,
+    ScrollView,
     ActivityIndicator,
     Image,
 } from 'react-native';
 import axios from 'axios';
 import { useUser } from '../context/UserContext';
-import CheckBox from '@react-native-community/checkbox';
+import Checkbox from 'expo-checkbox';
+
 
 const JambScreen = ({ navigation }) => {
     const [subjects, setSubjects] = useState([]);
@@ -20,7 +23,7 @@ const JambScreen = ({ navigation }) => {
     const [selectedSubjects, setSelectedSubjects] = useState([]);
 
     const toggleSubject = (subject) => {
-        const isSelected = selectedSubjects.includes(subject);
+        const isSelected = selectedSubjects.includes(subject); // ✅ scoped here
 
         if (!isSelected && selectedSubjects.length >= 4) {
             Alert.alert('Limit Reached', 'You can only select up to 4 subjects.');
@@ -33,6 +36,8 @@ const JambScreen = ({ navigation }) => {
             setSelectedSubjects((prev) => [...prev, subject]);
         }
     };
+
+
     const handleStartExam = () => {
         if (selectedSubjects.length < 1) {
             Alert.alert('No Subject Selected', 'Select at least 1 subject.');
@@ -44,7 +49,7 @@ const JambScreen = ({ navigation }) => {
             subtopicId: null,
             subtopic: null,
             selectedSubjects,
-        })
+        });
 
     };
     useEffect(() => {
@@ -97,27 +102,35 @@ const JambScreen = ({ navigation }) => {
             <FlatList
                 data={subjects}
                 keyExtractor={(item) => item.SubjectId.toString()}
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.subjectItem}
-                        onPress={() => toggleSubject(item.Subject)}>
-                        <View style={styles.subCont}>
-                            <Image
-                                source={
-                                    item.Icon
-                                        ? { uri: item.Icon }
-                                        : require('../assets/education.png')
-                                }
-                                style={styles.subImg}
-                            />
-                            <Text style={styles.subjectText}>{item.Subject}</Text>
-                            <CheckBox
+                renderItem={({ item }) => {
+                    const isSelected = selectedSubjects.includes(item.Subject); // ✅ here, item.Subject is defined
+
+                    return (
+                        <TouchableOpacity
+                            style={styles.subjectItem}
+                            onPress={() => toggleSubject(item.Subject)}
+                        >
+                            <Checkbox
                                 value={isSelected}
                                 onValueChange={() => toggleSubject(item.Subject)}
+                                color={isSelected ? '#864af9' : undefined}
                             />
-                        </View>
-                    </TouchableOpacity>
-                )}
+
+                            <View style={styles.subCont}>
+                                <Image
+                                    source={
+                                        item.Icon
+                                            ? { uri: item.Icon }
+                                            : require('../assets/education.png')
+                                    }
+                                    style={styles.subImg}
+                                />
+                                <Text style={styles.subjectText}>{item.Subject}</Text>
+                            </View>
+                        </TouchableOpacity>
+                    );
+                }}
+
                 contentContainerStyle={styles.subjectList}
                 showsVerticalScrollIndicator={false}
             />
@@ -223,6 +236,15 @@ const styles = StyleSheet.create({
         alignItems: 'center', // Center the text
         justifyContent: 'center',
         fontFamily: 'latto',
+    },
+    startButton: {
+        backgroundColor: '#864af9',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16,
     },
 });
 

@@ -33,7 +33,7 @@ export default function App() {
             headerShown: false
           }} />
           <Stack.Screen name="Dashboard" component={DashboardScreen} options={{
-            headerShown: false
+            headerShown: true
           }} />
           <Stack.Screen name="Subject" component={SubjectScreen} options={{
             headerShown: false
