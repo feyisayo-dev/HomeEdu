@@ -61,7 +61,18 @@ const ExamScreen = ({ route, navigation }) => {
             return;
         }
         Alert.alert("These are the selected subject(s)", selectedSubjects.join(', '));
-
+        if(type === 'classExam') {
+            let SubjectExam = selectedSubjects;
+            navigation.navigate('Question', {
+                subtopicId: null,
+                subtopic: null,
+                selectedSubjects,
+                type,
+                subject: SubjectExam,
+                topic: null,
+                subtopic: null,
+            });
+        }else{
         // Navigate to the exam screen, passing the selected subjects
         navigation.navigate('Question', {
             subtopicId: null,
@@ -70,7 +81,9 @@ const ExamScreen = ({ route, navigation }) => {
             type,
             subject,
             topic,
+            subtopic,
         });
+        }
     };
 
     useEffect(() => {

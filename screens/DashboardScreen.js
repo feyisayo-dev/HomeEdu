@@ -117,8 +117,14 @@ const DashboardScreen = ({ route, navigation }) => {
             );
 
             if (response.data.status === 200) {
-                setReports(response.data.data);
-                console.log("This is the report data", response.data);
+                // Map through the data and round Score to 2 decimal places
+                const roundedReports = response.data.data.map(report => ({
+                    ...report,
+                    Score: Number(parseFloat(report.Score).toFixed(2))  // Round to 2 dp and convert back to number
+                }));
+
+                setReports(roundedReports);
+                console.log("This is the report data", roundedReports);
             } else {
                 setReports([]);
                 setError('No reports found.');
@@ -584,12 +590,12 @@ const DashboardScreen = ({ route, navigation }) => {
                         ) : (
                             <>
                                 <FlatList
-                                    data={reports.slice(0, 5)} // Show only the first 5 reports
+                                    data={reports.slice(0, 2)} // Show only the first 5 reports
                                     keyExtractor={(item, index) => index.toString()}
                                     renderItem={({ item }) => (
                                         <View style={styles.reportItem}>
                                             <Text style={styles.reportTitle}>
-                                                {item.exam_name || item.subtopic_name || 'Unknown'}
+                                                {item.exam_name || item.subtopic_name || 'Exam'}
                                             </Text>
                                             <Text style={styles.reportScore}>
                                                 Score: {item.Score}%
@@ -686,7 +692,7 @@ const DashboardScreen = ({ route, navigation }) => {
                                         renderItem={({ item }) => (
                                             <View style={styles.modalReportItem}>
                                                 <Text style={styles.modalReportTitle}>
-                                                    {item.exam_name || item.subtopic_name || 'Unknown'}
+                                                    {item.exam_name || item.subtopic_name || 'Exam'}
                                                 </Text>
                                                 <Text style={styles.modalReportScore}>
                                                     Score: {item.Score}%
@@ -1098,7 +1104,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         padding: 16,
         marginBottom: 16,
-        maxHeight: 250, // Set a fixed height for scrollable area
+        maxHeight: 300, // Set a fixed height for scrollable area
         borderWidth: 1,
         borderColor: '#864af9',
     },

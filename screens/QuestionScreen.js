@@ -4,6 +4,7 @@ import axios from 'axios';
 import QuestionRenderer from '../renderer/QuestionRenderer';
 import { useUser } from '../context/UserContext';
 import { Video } from 'expo-av';
+import QuestionNumberStrip from '../components/QuestionNumberStrip'; // Adjust path if needed
 
 const QuestionScreen = ({ route, navigation }) => {
     const [currentIndex, setCurrentIndex] = useState(0); // Track the current question index
@@ -17,6 +18,8 @@ const QuestionScreen = ({ route, navigation }) => {
     const [showNarrations, setShowNarrations] = useState(false); // Show narrations toggle
     const [isModalVisible, setIsModalVisible] = useState(false);
     const { subtopicId, subtopic, selectedSubjects, type, subject, topic } = route.params;
+    const [unansweredModalVisible, setUnansweredModalVisible] = useState(false);
+    const [unansweredQuestions, setUnansweredQuestions] = useState([]);
 
 
     let startTime;
@@ -37,38 +40,72 @@ const QuestionScreen = ({ route, navigation }) => {
         }
 
         const fetchQuestions = async () => {
+            console.log("This is the selectedSubjects", selectedSubjects);
+            console.log("This is the subject", subject);
+            console.log("This is the topic", topic);
             if (selectedSubjects) {
-                let payload = {
-                    class: userData.class,
-                    total_questions: 200, // Or dynamically based on exam type
-                };
+                try {
+                    let payload = {
+                        class: userData.class,
+                    };
 
-                if (type === 'JAMB' && selectedSubjects?.length > 0) {
-                    payload.JAMB_SUBJECT = selectedSubjects.join(',');
-                } else if (type === 'classExam') {
-                    payload.subject = subject;
-                } else if (type === 'subjectExam') {
-                    payload.subject = subject;
-                } else if (type === 'topicExam') {
-                    payload.subject = subject;
-                    payload.topic = topic;
-                } else if (type === 'subtopicExam') {
-                    // Optional: if you're extending backend later to support subtopic filtering
-                    payload.subject = subject;
-                    payload.topic = topic;
-                    payload.subtopic = subtopic;
+                    switch (type) {
+                        case 'JAMB':
+                            if (selectedSubjects.length > 0) {
+                                payload.JAMB_SUBJECT = selectedSubjects.join(',');
+                                payload.total_questions = 200; // JAMB standard
+                            }
+                            break;
+
+                        case 'classExam':
+                            payload.subject = subject;
+                            payload.total_questions = 60; // General exam per subject
+                            break;
+
+                        case 'subjectExam':
+                            payload.subject = subject;
+                            payload.total_questions = 40; // Focused subject test
+                            break;
+
+                        case 'topicExam':
+                            payload.subject = subject;
+                            payload.topic = topic;
+                            payload.total_questions = 30; // Topic-level test
+                            break;
+
+                        case 'subtopicExam':
+                            payload.subject = subject;
+                            payload.topic = topic;
+                            payload.subtopic = subtopic;
+                            payload.total_questions = 20; // Most granular
+                            break;
+
+                        default:
+                            payload.total_questions = 10; // fallback minimum
+                            break;
+                    }
+
+                    console.log("Payload to send:", payload);
+
+                    const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/ExamQuestions`, payload);
+
+                    console.log("This is the response", response);
+
+                    const apiData = response.data.data || [];
+                    const parsedQuestions = apiData.map((q) => ({
+                        ...q,
+                        options: q.options ? JSON.parse(q.options) : null,
+                    }));
+                    console.log("This is the parsedQuestions", parsedQuestions);
+                    setQuestions(parsedQuestions);
+                } catch (error) {
+                    console.error('Error fetching ExamQuestions:', error);
+                    setQuestions([]);
+                } finally {
+                    setLoading(false);
                 }
-
-                const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/ExamQuestions`, payload);
-                const apiData = response.data.data || [];
-                const parsedQuestions = apiData.map((q) => ({
-                    ...q,
-                    options: q.options ? JSON.parse(q.options) : null,
-                }));
-
-                console.log("This is the parsedQuestions", parsedQuestions);
-                setQuestions(parsedQuestions);
             } else {
+                // Fallback to default subtopic fetch
                 try {
                     const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/questions/${subtopicId}`, {
                         class: userData.class,
@@ -79,16 +116,18 @@ const QuestionScreen = ({ route, navigation }) => {
                         ...q,
                         options: q.options ? JSON.parse(q.options) : null,
                     }));
+
                     console.log("This is the parsedQuestions", parsedQuestions);
                     setQuestions(parsedQuestions);
                 } catch (error) {
-                    console.error('Error fetching questions:', error);
+                    console.error('Error fetching fallback subtopic questions:', error);
                     setQuestions([]);
                 } finally {
                     setLoading(false);
                 }
             }
         };
+
 
         fetchQuestions();
     }, [userData]);
@@ -101,13 +140,29 @@ const QuestionScreen = ({ route, navigation }) => {
         }));
     };
     const submitReport = async (time_taken, percentage) => {
+        let examId = null;
+
+        if (selectedSubjects && selectedSubjects.length > 0) {
+            const prefix = selectedSubjects[0].slice(0, 3).toUpperCase();
+
+            const subjectCount = selectedSubjects.length.toString().padStart(1, '0');
+
+            // If topics and subtopics are arrays (e.g., selectedTopics or selectedSubtopics)
+            const topicCount = Array.isArray(topic) ? topic.length : topic ? 1 : 0;
+            const subtopicCount = Array.isArray(subtopic) ? subtopic.length : subtopic ? 1 : 0;
+
+            const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+            examId = `${prefix}${subjectCount}${topicCount}${subtopicCount}${randomCode}`;
+        }
+
         const reportData = {
             username: userData.username,
             score: percentage,
             subtopicId: subtopicId,
-            examId: null,
+            examId: examId,
             time_taken: time_taken,
-            class: userData.class, // ✅ Required for leaderboard update on backend
+            class: userData.class,
         };
 
         try {
@@ -134,6 +189,7 @@ const QuestionScreen = ({ route, navigation }) => {
 
 
 
+
     const handleSubmit = async () => {
         const selectedAnswer = userAnswers[questions[currentIndex].QuestionId];
 
@@ -141,10 +197,11 @@ const QuestionScreen = ({ route, navigation }) => {
         console.log('Selected Answer for Question:', questions[currentIndex].QuestionId);
         console.log('Answer:', selectedAnswer);
 
-        if (!selectedAnswer) {
+        if (selectedAnswer === undefined || selectedAnswer === null) {
             Alert.alert('Answer Required', 'Please select an answer before submitting.');
             return;
         }
+
 
         setShowNarrations(true); // Show narrations after submitting the answer
 
@@ -196,7 +253,7 @@ const QuestionScreen = ({ route, navigation }) => {
             setCurrentIndex((prevIndex) => prevIndex + 1);
             setKey((prevKey) => prevKey + 1); // Change key to trigger full re-render
         } else {
-            computeResults(); // Calculate results when the last question is completed
+            computeResults(); // only compute if all are answered
         }
     };
 
@@ -230,6 +287,18 @@ const QuestionScreen = ({ route, navigation }) => {
         setPassed(percentage >= 70);
     };
 
+    const handleFinalSubmit = () => {
+        const unanswered = questions
+            .filter((q) => !userAnswers[q.QuestionId])
+            .map((_, index) => index + 1); // Get question numbers (1-based)
+
+        if (unanswered.length > 0) {
+            setUnansweredQuestions(unanswered);
+            setUnansweredModalVisible(true); // Show modal
+        } else {
+            computeResults(); // Proceed if all are answered
+        }
+    };
 
 
     useEffect(() => {
@@ -237,136 +306,181 @@ const QuestionScreen = ({ route, navigation }) => {
     }, [results]);
 
     return (
-        <ScrollView style={styles.container} key={key}>
+        <View style={{ flex: 1 }}>
+            <ScrollView style={styles.container} key={key}>
 
-            <View style={styles.topDiv}>
-                <View style={styles.tNav}>
-                    <Text style={styles.title}>Questions for Subtopic: {subtopic}</Text>
-                </View>
-            </View>
-
-            <View style={styles.bottomDiv}></View>
-            {questions.length > 0 && currentIndex < questions.length ? (
-                <View style={styles.questionContainer}>
-                    <QuestionRenderer
-                        question={questions[currentIndex]}
-                        onAnswerSelected={handleAnswerSelected}
-                    />
-
-                    {showNarrations ? (
-                        <ScrollView style={styles.narrationContainer}>
-                            {narrations[questions[currentIndex].QuestionId]?.map((item, idx) => {
-                                if (item.type === 'text') {
-                                    return <Text key={idx} style={styles.narrationText}>{item.value}</Text>;
-                                } else if (item.type === 'image') {
-                                    return (
-                                        <Image
-                                            key={idx}
-                                            source={{ uri: item.value }}
-                                            style={styles.narrationImage}
-                                        />
-                                    );
-                                } else if (item.type === 'video') {
-                                    return (
-                                        <Video
-                                            key={idx}
-                                            source={{ uri: item.value }}
-                                            style={styles.narrationVideo}
-                                            useNativeControls
-                                        />
-                                    );
-                                }
-                                return null;
-                            })}
-                            <TouchableOpacity
-                                onPress={
-                                    currentIndex === questions.length - 1
-                                        ? computeResults
-                                        : handleNextQuestion
-                                }
-                            >
-                                <Text style={styles.buttonText}>
-                                    {currentIndex === questions.length - 1 ? 'Finish' : 'Next'}
-                                </Text>
-                            </TouchableOpacity>
-                        </ScrollView>
-                    ) : (
-                        <TouchableOpacity onPress={handleSubmit}>
-                            <Text style={styles.buttonText}>
-                                {currentIndex === questions.length - 1 ? 'Submit' : 'Mark & View Narrations'}
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            ) : (
-                <Text>No questions available.</Text>
-            )}
-            <Modal
-                visible={isModalVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setIsModalVisible(false)}
-            >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        {results && (
-                            <>
-                                {/* Display Star Sticker Based on Score */}
-                                {(() => {
-                                    const percentage = (results.correct / results.total) * 100;
-
-                                    let sticker;
-                                    if (percentage >= 90) {
-                                        sticker = require('../assets/gold_star.png');
-                                    } else if (percentage >= 70) {
-                                        sticker = require('../assets/silver_star.png');
-                                    } else if (percentage >= 50) {
-                                        sticker = require('../assets/bronze_star.png');
-                                    } else {
-                                        sticker = require('../assets/dull_star.png');
-                                    }
-
-                                    return (
-                                        <Image
-                                            source={sticker}
-                                            style={styles.stickerImage}
-                                        />
-                                    );
-                                })()}
-
-                                <Text style={styles.resultText}>
-                                    You answered {results.correct} out of {results.total} questions correctly.
-                                </Text>
-                                <TouchableOpacity
-                                    style={styles.modalButton}
-                                    onPress={() => {
-                                        setIsModalVisible(false); // Close the modal
-                                        if (passed) {
-                                            // Navigate to Dashboard with reset if passed
-                                            navigation.reset({
-                                                index: 0,
-                                                routes: [{ name: 'Dashboard' }],
-                                            });
-                                        } else {
-                                            // Navigate to Explanation if failed
-                                            navigation.navigate('Explanation', {
-                                                subtopicId,
-                                                subtopic,
-                                            });
-                                        }
-                                    }}
-                                >
-                                    <Text style={styles.modalButtonText}>Close</Text>
-                                </TouchableOpacity>
-
-
-                            </>
-                        )}
+                <View style={styles.topDiv}>
+                    <View style={styles.tNav}>
+                        <Text style={styles.title}>Questions for Subtopic: {subtopic}</Text>
                     </View>
                 </View>
-            </Modal>
 
-        </ScrollView>
+                {questions.length > 0 && currentIndex < questions.length ? (
+                    <View style={styles.questionContainer}>
+                        <QuestionRenderer
+                            question={questions[currentIndex]}
+                            onAnswerSelected={handleAnswerSelected}
+                            selectedAnswer={userAnswers[questions[currentIndex].QuestionId]} // ← this line
+                        />
+
+                        {showNarrations ? (
+                            <ScrollView style={styles.narrationContainer}>
+                                {narrations[questions[currentIndex].QuestionId]?.map((item, idx) => {
+                                    if (item.type === 'text') {
+                                        return <Text key={idx} style={styles.narrationText}>{item.value}</Text>;
+                                    } else if (item.type === 'image') {
+                                        return (
+                                            <Image
+                                                key={idx}
+                                                source={{ uri: item.value }}
+                                                style={styles.narrationImage}
+                                            />
+                                        );
+                                    } else if (item.type === 'video') {
+                                        return (
+                                            <Video
+                                                key={idx}
+                                                source={{ uri: item.value }}
+                                                style={styles.narrationVideo}
+                                                useNativeControls
+                                            />
+                                        );
+                                    }
+                                    return null;
+                                })}
+                                <TouchableOpacity
+                                    onPress={
+                                        currentIndex === questions.length - 1
+                                            ? handleFinalSubmit // use new wrapper instead of computeResults
+                                            : handleNextQuestion
+                                    }
+                                >
+                                    <Text style={styles.buttonText}>
+                                        {currentIndex === questions.length - 1 ? 'Finish' : 'Next'}
+                                    </Text>
+                                </TouchableOpacity>
+
+                            </ScrollView>
+                        ) : (
+                            <TouchableOpacity onPress={handleSubmit}>
+                                <Text style={styles.buttonText}>
+                                    {currentIndex === questions.length - 1 ? 'Submit' : 'Mark & View Narrations'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                ) : (
+                    <Text>No questions available.</Text>
+                )}
+                <Modal
+                    visible={isModalVisible}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setIsModalVisible(false)}
+                >
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalContent}>
+                            {results && (
+                                <>
+                                    {/* Display Star Sticker Based on Score */}
+                                    {(() => {
+                                        const percentage = (results.correct / results.total) * 100;
+
+                                        let sticker;
+                                        if (percentage >= 90) {
+                                            sticker = require('../assets/gold_star.png');
+                                        } else if (percentage >= 70) {
+                                            sticker = require('../assets/silver_star.png');
+                                        } else if (percentage >= 50) {
+                                            sticker = require('../assets/bronze_star.png');
+                                        } else {
+                                            sticker = require('../assets/dull_star.png');
+                                        }
+
+                                        return (
+                                            <Image
+                                                source={sticker}
+                                                style={styles.stickerImage}
+                                            />
+                                        );
+                                    })()}
+
+                                    <Text style={styles.resultText}>
+                                        You answered {results.correct} out of {results.total} questions correctly.
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.modalButton}
+                                        onPress={() => {
+                                            setIsModalVisible(false); // Close the modal
+                                            if (passed) {
+                                                // Navigate to Dashboard with reset if passed
+                                                navigation.reset({
+                                                    index: 0,
+                                                    routes: [{ name: 'Dashboard' }],
+                                                });
+                                            } else {
+                                                // Navigate to Explanation if failed
+                                                navigation.navigate('Explanation', {
+                                                    subtopicId,
+                                                    subtopic,
+                                                });
+                                            }
+                                        }}
+                                    >
+                                        <Text style={styles.modalButtonText}>Close</Text>
+                                    </TouchableOpacity>
+
+
+                                </>
+                            )}
+                        </View>
+                    </View>
+                </Modal>
+                <Modal
+                    visible={unansweredModalVisible}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setUnansweredModalVisible(false)}
+                >
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Unanswered Questions</Text>
+                            <Text style={styles.modalText}>
+                                You haven't answered the following questions:
+                            </Text>
+                            <Text style={styles.modalList}>
+                                {unansweredQuestions.join(', ')}
+                            </Text>
+
+                            <TouchableOpacity
+                                style={styles.modalButton}
+                                onPress={() => setUnansweredModalVisible(false)}
+                            >
+                                <Text style={styles.modalButtonText}>Go Back</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, { backgroundColor: '#864af9' }]}
+                                onPress={() => {
+                                    setUnansweredModalVisible(false);
+                                    computeResults();
+                                }}
+                            >
+                                <Text style={[styles.modalButtonText, { color: 'white' }]}>Submit Anyway</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
+
+            </ScrollView>
+            <View style={styles.BottomDiv}>
+                <QuestionNumberStrip
+                    total={questions.length}
+                    currentIndex={currentIndex}
+                    onPressNumber={(index) => setCurrentIndex(index)}
+                />
+            </View>
+        </View>
     );
 
 
@@ -542,7 +656,51 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontFamily: 'latto',
     },
-
+    BottomDiv: {
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#fcfcfc',
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        paddingVertical: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+        elevation: 10, // for Android shadow
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 10,
+    },
+    modalText: {
+        fontSize: 16,
+        marginBottom: 5,
+        textAlign: 'center',
+    },
+    modalList: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#e74c3c',
+        marginBottom: 15,
+    },
+    modalButton: {
+        marginTop: 10,
+        padding: 10,
+        borderRadius: 8,
+        backgroundColor: '#ddd',
+        width: '80%',
+        alignItems: 'center',
+    },
+    modalButtonText: {
+        fontSize: 16,
+    },
 });
 
 

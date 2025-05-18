@@ -23,13 +23,10 @@ const ObjectiveQuestion = ({ question, selectedOption, onSelection, borderColor 
 );
 
 
-const TheoryQuestion = ({ question, onAnswerChange, borderColor }) => (
+const TheoryQuestion = ({ question, onAnswerChange, borderColor, value }) => (
     <View style={[styles.questionContainer, { borderColor }]}>
         {question.image && (
-            <Image
-                source={{ uri: question.image }}
-                style={styles.questionImage}
-            />
+            <Image source={{ uri: question.image }} style={styles.questionImage} />
         )}
         <Text style={styles.questionText}>{question.content}</Text>
         <TextInput
@@ -38,36 +35,34 @@ const TheoryQuestion = ({ question, onAnswerChange, borderColor }) => (
             multiline
             numberOfLines={4}
             onChangeText={onAnswerChange}
+            value={value}
         />
     </View>
 );
 
-
-const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor }) => (
+const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor, value }) => (
     <View style={[styles.questionContainer, { borderColor }]}>
         {question.image && (
-            <Image
-                source={{ uri: question.image }}
-                style={styles.questionImage}
-            />
+            <Image source={{ uri: question.image }} style={styles.questionImage} />
         )}
         <Text style={styles.questionText}>{question.content}</Text>
         <TextInput
             style={styles.input}
             placeholder="Fill in the blank"
             onChangeText={onAnswerChange}
+            value={value}
         />
     </View>
 );
 
 
-const QuestionRenderer = ({ question, onAnswerSelected }) => {
-    const [selectedOption, setSelectedOption] = useState(null);
+
+const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
 
     const handleSelection = (value) => {
-        setSelectedOption(value);
         onAnswerSelected(question.QuestionId, value);
     };
+
 
     const handleAnswerChange = (value) => {
         onAnswerSelected(question.QuestionId, value);
@@ -90,10 +85,11 @@ const QuestionRenderer = ({ question, onAnswerSelected }) => {
             return (
                 <ObjectiveQuestion
                     question={question}
-                    selectedOption={selectedOption}
+                    selectedOption={selectedAnswer}
                     onSelection={handleSelection}
-                    borderColor={getBorderColor(question)} // Pass borderColor as a prop
+                    borderColor={getBorderColor(question)}
                 />
+
             );
 
         case 'theory':
@@ -101,8 +97,10 @@ const QuestionRenderer = ({ question, onAnswerSelected }) => {
                 <TheoryQuestion
                     question={question}
                     onAnswerChange={handleAnswerChange}
-                    borderColor={getBorderColor(question)} // Pass borderColor as a prop
+                    borderColor={getBorderColor(question)}
+                    value={selectedAnswer}
                 />
+
             );
 
         case 'fill-in-the-gaps':
@@ -111,6 +109,7 @@ const QuestionRenderer = ({ question, onAnswerSelected }) => {
                     question={question}
                     onAnswerChange={handleAnswerChange}
                     borderColor={getBorderColor(question)} // Pass borderColor as a prop
+                    value={selectedAnswer}
                 />
             );
 
