@@ -60,26 +60,27 @@ const SubjectScreen = ({ navigation }) => {
   }
 
   const handleButtonPress = () => {
-    navigation.navigate('JAMB', { userData });
+    navigation.navigate('Exam', {
+      type: 'classExam',
+      subject: null,
+      topic: null,
+      subtopic: null,
+      userClass: userData.class,
+    });
   }
   return (
     <View style={styles.subjectSelectionContainer}>
-      {userData.class === 'JAMB' ? (
-        <View style={styles.headerRow}>
-          <Text style={styles.subjectSelectionTitleWithButton}>
-            Subjects for Class {userData.class}
-          </Text>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleButtonPress}>
-            <Text style={styles.headerButtonText}>Take Exam</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <Text style={styles.subjectSelectionTitle}>
+      <View style={styles.headerRow}>
+        <Text style={styles.subjectSelectionTitleWithButton}>
           Subjects for Class {userData.class}
         </Text>
-      )}
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={handleButtonPress}>
+          <Text style={styles.headerButtonText}>Take Exam</Text>
+        </TouchableOpacity>
+      </View>
+
       <FlatList
         data={subjects}
         keyExtractor={(item) => item.SubjectId.toString()}

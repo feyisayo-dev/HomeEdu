@@ -16,7 +16,7 @@ const QuestionScreen = ({ route, navigation }) => {
     const [results, setResults] = useState(null); // Track results
     const [showNarrations, setShowNarrations] = useState(false); // Show narrations toggle
     const [isModalVisible, setIsModalVisible] = useState(false);
-    const { subtopicId, subtopic, selectedSubjects } = route.params;
+    const { subtopicId, subtopic, selectedSubjects, type, subject, topic } = route.params;
 
 
     let startTime;
@@ -37,27 +37,37 @@ const QuestionScreen = ({ route, navigation }) => {
         }
 
         const fetchQuestions = async () => {
-            if (userData.class === "JAMB") {
-            try {
-                const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/ExamQuestions`, {
+            if (selectedSubjects) {
+                let payload = {
                     class: userData.class,
-                    total_questions: 200,
-                    JAMB_SUBJECT: selectedSubjects,
-                });
+                    total_questions: 200, // Or dynamically based on exam type
+                };
 
+                if (type === 'JAMB' && selectedSubjects?.length > 0) {
+                    payload.JAMB_SUBJECT = selectedSubjects.join(',');
+                } else if (type === 'classExam') {
+                    payload.subject = subject;
+                } else if (type === 'subjectExam') {
+                    payload.subject = subject;
+                } else if (type === 'topicExam') {
+                    payload.subject = subject;
+                    payload.topic = topic;
+                } else if (type === 'subtopicExam') {
+                    // Optional: if you're extending backend later to support subtopic filtering
+                    payload.subject = subject;
+                    payload.topic = topic;
+                    payload.subtopic = subtopic;
+                }
+
+                const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/ExamQuestions`, payload);
                 const apiData = response.data.data || [];
                 const parsedQuestions = apiData.map((q) => ({
                     ...q,
                     options: q.options ? JSON.parse(q.options) : null,
                 }));
+
                 console.log("This is the parsedQuestions", parsedQuestions);
                 setQuestions(parsedQuestions);
-            } catch (error) {
-                console.error('Error fetching questions:', error);
-                setQuestions([]);
-            } finally {
-                setLoading(false);
-            }
             } else {
                 try {
                     const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/questions/${subtopicId}`, {

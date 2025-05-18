@@ -80,6 +80,7 @@ const ExampleScreen = ({ route, navigation }) => {
                         subtopicId: subtopicId,
                         subtopic: subtopic,
                         selectedSubjects: null,
+                        type: null,
                     })
 
                 }
