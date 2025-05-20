@@ -139,21 +139,29 @@ const QuestionScreen = ({ route, navigation }) => {
             [questionId]: answer,
         }));
     };
+
+    const getSubjectCodes = (subjects) => {
+        if (!subjects || subjects.length === 0) return '';
+        const codes = subjects.map(subject => subject.slice(0, 3).toUpperCase());
+        return codes.join('') + '001';  // You can replace '001' with any logic if needed
+    };
+
+
     const submitReport = async (time_taken, percentage) => {
         let examId = null;
+        let subjectCodes = null;
+        let examTitle = null;
 
         if (selectedSubjects && selectedSubjects.length > 0) {
             const prefix = selectedSubjects[0].slice(0, 3).toUpperCase();
-
             const subjectCount = selectedSubjects.length.toString().padStart(1, '0');
-
-            // If topics and subtopics are arrays (e.g., selectedTopics or selectedSubtopics)
             const topicCount = Array.isArray(topic) ? topic.length : topic ? 1 : 0;
             const subtopicCount = Array.isArray(subtopic) ? subtopic.length : subtopic ? 1 : 0;
-
             const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
 
             examId = `${prefix}${subjectCount}${topicCount}${subtopicCount}${randomCode}`;
+            subjectCodes = getSubjectCodes(selectedSubjects);
+            examTitle = `${selectedSubjects.join(' ')} for ${userData.class}`;
         }
 
         const reportData = {
@@ -163,6 +171,8 @@ const QuestionScreen = ({ route, navigation }) => {
             examId: examId,
             time_taken: time_taken,
             class: userData.class,
+            subjectCodes: subjectCodes,
+            examTitle: examTitle,
         };
 
         try {
@@ -185,10 +195,6 @@ const QuestionScreen = ({ route, navigation }) => {
             console.error('Error submitting report:', error);
         }
     };
-
-
-
-
 
     const handleSubmit = async () => {
         const selectedAnswer = userAnswers[questions[currentIndex].QuestionId];
