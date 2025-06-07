@@ -1,21 +1,83 @@
 import React, { useState } from 'react';
 import { View, Text, Image, TextInput, StyleSheet } from 'react-native';
 import { RadioButton } from 'react-native-paper';
+import Katex  from 'react-native-katex';
+
+const renderContentWithMath = (text, textStyle = {}) => {
+    const parts = text.split(/(\$\$.*?\$\$)/g); // split text by $$...$$ blocks
+
+    return (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {parts.map((part, index) => {
+                if (part.startsWith('$$') && part.endsWith('$$')) {
+                    const math = part.slice(2, -2).trim();
+                    return <ErrorSafeMath key={`math-${index}`} math={math} />;
+                } else {
+                    return (
+                        <Text key={`text-${index}`} style={textStyle}>
+                            {part}
+                        </Text>
+                    );
+                }
+            })}
+        </View>
+    );
+};
+
+const ErrorSafeMath = ({ math }) => {
+    const [hasError, setHasError] = useState(false);
+
+    if (hasError) {
+        console.warn("❌ Math rendering failed for:", math);
+        return (
+            <Text style={{ color: 'red', fontStyle: 'italic' }}>
+                Failed to render: {math}
+            </Text>
+        );
+    }
+
+    return (
+        <Katex
+            expression={math}
+            displayMode={false}
+            throwOnError={false}
+            errorColor="#f00"
+            style={{ minHeight: 30 }}
+            inlineStyle={inlineStyle}
+            onError={() => setHasError(true)}
+            onLoad={() => console.log("✅ Loaded:", math)}
+        />
+    );
+};
+
+const inlineStyle = `
+html, body {
+  background-color: transparent;
+  margin: 0;
+  padding: 0;
+}
+.katex {
+  font-size: 4em;
+}
+`;
 
 const ObjectiveQuestion = ({ question, selectedOption, onSelection, borderColor }) => (
     <View style={[styles.questionContainer, { borderColor }]}>
         {question.image && (
-            <Image
-                source={{ uri: question.image }}
-                style={styles.questionImage}
-            />
+            <Image source={{ uri: question.image }} style={styles.questionImage} />
         )}
-        <Text style={styles.questionText}>{question.content}</Text>
+
+        <View style={{ marginBottom: 16 }}>
+            {renderContentWithMath(question.content, styles.questionText)}
+        </View>
+
         <RadioButton.Group onValueChange={onSelection} value={selectedOption}>
             {question.options.map((option, index) => (
                 <View key={index} style={styles.optionContainer}>
                     <RadioButton value={option} />
-                    <Text style={styles.optionText}>{option}</Text>
+                    <View style={{ marginLeft: 8, flex: 1 }}>
+                        {renderContentWithMath(option, styles.optionText)}
+                    </View>
                 </View>
             ))}
         </RadioButton.Group>
@@ -28,7 +90,9 @@ const TheoryQuestion = ({ question, onAnswerChange, borderColor, value }) => (
         {question.image && (
             <Image source={{ uri: question.image }} style={styles.questionImage} />
         )}
-        <Text style={styles.questionText}>{question.content}</Text>
+        <View style={{ marginBottom: 8 }}>
+            {renderContentWithMath(question.content, styles.questionText)}
+        </View>
         <TextInput
             style={styles.textArea}
             placeholder="Write your answer here"
@@ -38,6 +102,7 @@ const TheoryQuestion = ({ question, onAnswerChange, borderColor, value }) => (
             value={value}
         />
     </View>
+
 );
 
 const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor, value }) => (
@@ -45,7 +110,9 @@ const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor, value })
         {question.image && (
             <Image source={{ uri: question.image }} style={styles.questionImage} />
         )}
-        <Text style={styles.questionText}>{question.content}</Text>
+        <View style={{ marginBottom: 8 }}>
+            {renderContentWithMath(question.content, styles.questionText)}
+        </View>
         <TextInput
             style={styles.input}
             placeholder="Fill in the blank"
@@ -53,12 +120,13 @@ const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor, value })
             value={value}
         />
     </View>
+
 );
 
 
 
 const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
-
+    console.log('🧠 Rendering question:', question.content);
     const handleSelection = (value) => {
         onAnswerSelected(question.QuestionId, value);
     };

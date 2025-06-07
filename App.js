@@ -14,6 +14,7 @@ import 'react-native-gesture-handler';
 import ExplanationScreen from './screens/ExplanationScreen';
 import ExampleScreen from './screens/ExampleScreen';
 import ExamScreen from './screens/ExamScreen';
+import MathTestScreen from './screens/test_screen';
 
 
 const Stack = createStackNavigator();
@@ -51,6 +52,9 @@ export default function App() {
             headerShown: false
           }} />
           <Stack.Screen name="Question" component={QuestionScreen} options={{
+            headerShown: false
+          }} />
+          <Stack.Screen name="Test" component={MathTestScreen} options={{
             headerShown: false
           }} />
           <Stack.Screen name="Exam" component={ExamScreen} options={{

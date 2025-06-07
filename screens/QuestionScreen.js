@@ -5,6 +5,7 @@ import QuestionRenderer from '../renderer/QuestionRenderer';
 import { useUser } from '../context/UserContext';
 import { Video } from 'expo-av';
 import QuestionNumberStrip from '../components/QuestionNumberStrip'; // Adjust path if needed
+import Katex from 'react-native-katex';
 
 const QuestionScreen = ({ route, navigation }) => {
     const [currentIndex, setCurrentIndex] = useState(0); // Track the current question index
@@ -21,7 +22,52 @@ const QuestionScreen = ({ route, navigation }) => {
     const [unansweredModalVisible, setUnansweredModalVisible] = useState(false);
     const [unansweredQuestions, setUnansweredQuestions] = useState([]);
 
+    const renderContentWithMath = (text, textStyle = {}) => {
+        const parts = text.split(/(\$\$.*?\$\$)/g); // split text by $$...$$ blocks
 
+        return (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {parts.map((part, index) => {
+                    if (part.startsWith('$$') && part.endsWith('$$')) {
+                        const math = part.slice(2, -2).trim();
+                        return <ErrorSafeMath key={`math-${index}`} math={math} />;
+                    } else {
+                        return (
+                            <Text key={`text-${index}`} style={textStyle}>
+                                {part}
+                            </Text>
+                        );
+                    }
+                })}
+            </View>
+        );
+    };
+
+    const ErrorSafeMath = ({ math }) => {
+        const [hasError, setHasError] = useState(false);
+
+        if (hasError) {
+            console.warn("❌ Math rendering failed for:", math);
+            return (
+                <Text style={{ color: 'red', fontStyle: 'italic' }}>
+                    Failed to render: {math}
+                </Text>
+            );
+        }
+
+        return (
+            <Katex
+                expression={math}
+                displayMode={false}
+                throwOnError={false}
+                errorColor="#f00"
+                style={{ minHeight: 30 }}
+                inlineStyle={inlineStyle}
+                onError={() => setHasError(true)}
+                onLoad={() => console.log("✅ Loaded:", math)}
+            />
+        );
+    };
     let startTime;
 
     const startQuiz = () => {
@@ -333,7 +379,7 @@ const QuestionScreen = ({ route, navigation }) => {
                             <ScrollView style={styles.narrationContainer}>
                                 {narrations[questions[currentIndex].QuestionId]?.map((item, idx) => {
                                     if (item.type === 'text') {
-                                        return <Text key={idx} style={styles.narrationText}>{item.value}</Text>;
+                                        return renderContentWithMath(item.value, styles.narrationText);
                                     } else if (item.type === 'image') {
                                         return (
                                             <Image

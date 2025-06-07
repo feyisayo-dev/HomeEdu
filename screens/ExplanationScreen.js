@@ -2,13 +2,59 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ActivityIndicator, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import axios from 'axios';
 import { Video } from 'expo-av';
+import Katex from 'react-native-katex';
 
 const ExplanationScreen = ({ route, navigation }) => {
     const { subtopicId, Subtopic } = route.params; // Get SubtopicId from route params
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const renderContentWithMath = (text, textStyle = {}) => {
+        const parts = text.split(/(\$\$.*?\$\$)/g); // split text by $$...$$ blocks
 
+        return (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {parts.map((part, index) => {
+                    if (part.startsWith('$$') && part.endsWith('$$')) {
+                        const math = part.slice(2, -2).trim();
+                        return <ErrorSafeMath key={`math-${index}`} math={math} />;
+                    } else {
+                        return (
+                            <Text key={`text-${index}`} style={textStyle}>
+                                {part}
+                            </Text>
+                        );
+                    }
+                })}
+            </View>
+        );
+    };
+
+    const ErrorSafeMath = ({ math }) => {
+        const [hasError, setHasError] = useState(false);
+
+        if (hasError) {
+            console.warn("❌ Math rendering failed for:", math);
+            return (
+                <Text style={{ color: 'red', fontStyle: 'italic' }}>
+                    Failed to render: {math}
+                </Text>
+            );
+        }
+
+        return (
+            <Katex
+                expression={math}
+                displayMode={false}
+                throwOnError={false}
+                errorColor="#f00"
+                style={{ minHeight: 30 }}
+                inlineStyle={inlineStyle}
+                onError={() => setHasError(true)}
+                onLoad={() => console.log("✅ Loaded:", math)}
+            />
+        );
+    };
     useEffect(() => {
         const fetchExplanation = async () => {
             try {
@@ -46,9 +92,9 @@ const ExplanationScreen = ({ route, navigation }) => {
             {content.map((item, index) => {
                 if (item.type === 'text') {
                     return (
-                        <Text key={index} style={styles.text}>
-                            {item.value}
-                        </Text>
+                        <View key={index} style={styles.text}>
+                            {renderContentWithMath(item.value, styles.text)}
+                        </View>
                     );
                 } else if (item.type === 'image') {
                     return (
@@ -91,7 +137,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fcfcfc', // Light gray background
         padding: 16,
         paddingBottom: 32,
-       // marginBottom: 20,
+        // marginBottom: 20,
     },
     text: {
         fontSize: 16,
@@ -122,22 +168,21 @@ const styles = StyleSheet.create({
         height: 200, // Fixed video height
     },
     button: {
-        backgroundColor: '#864af9', // Themed blue background
+        backgroundColor: '#864af9',
         paddingVertical: 14,
         borderRadius: 8,
-        alignItems: 'center', // Center-align the text inside
-        marginTop: 16, // Space above the button
+        alignItems: 'center',
+        marginTop: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
-        elevation: 3, // Elevation for Android
+        elevation: 3,
     },
     buttonText: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#fcfcfc', // White text for contrast
-        fontFamily: 'latto',
+        color: '#fff', // White text for contrast
     },
 });
 
