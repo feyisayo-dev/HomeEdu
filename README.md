@@ -1,11 +1,39 @@
-# Sample Snack app
+# HomeEdu Mobile App 📚📱
 
-Open the `App.js` file to start writing some code. You can preview the changes directly on your phone or tablet by scanning the **QR code** or use the iOS or Android emulators. When you're done, click **Save** and share the link!
+HomeEdu is a React Native app for students to learn and practice different subjects through categorized topics, examples, and quizzes. It includes support for **mathematical equations** using **KaTeX rendering**, and features dynamic content fetched from a Laravel backend.
 
-When you're ready to see everything that Expo provides (or if you want to use your own editor) you can **Download** your project and use it with [expo cli](https://docs.expo.dev/get-started/installation/#expo-cli)).
+---
 
-All projects created in Snack are publicly available, so you can easily share the link to this project via link, or embed it on a web page with the `<>` button.
+## ✨ Features
 
-If you're having problems, you can tweet to us [@expo](https://twitter.com/expo) or ask in our [forums](https://forums.expo.dev/c/expo-dev-tools/61) or [Discord](https://chat.expo.dev/).
+- 📘 Browse Subjects, Topics, and Subtopics
+- 🧠 View Examples with LaTeX Math Rendering (`$$x^2 + y^2 = z^2$$`)
+- ✅ Take Quizzes with Objective, Theory, and Fill-in-the-Blank questions
+- 📤 Questions with Images, Videos, or Plain Text
+- 💬 Real-time Preview for LaTeX in Admin Panel (Web)
+- 🔐 User Authentication (optional)
+- ⚙️ Dynamic content fetched from Laravel API
 
-Snack is Open Source. You can find the code on the [GitHub repo](https://github.com/expo/snack).
+---
+
+## 📦 Tech Stack
+
+- **Frontend**: React Native + Expo Go
+- **Backend**: Laravel REST API
+- **Math Rendering**: [`react-native-katex`](https://github.com/tombatossals/react-native-katex)
+- **Styling**: Custom with React Native `StyleSheet`
+- **Media Support**: Images and Videos via `expo-image-picker` or file upload
+- **Navigation**: React Navigation
+
+---
+
+## 🧮 LaTeX Rendering
+
+Mathematical content in examples is wrapped in `$$ ... $$` and rendered using `react-native-katex`.
+
+```js
+// Example usage:
+renderContentWithMath("The solution is $$x = {-b \\pm \\sqrt{b^2-4ac} \\over 2a}$$", styles.text)
+
+
+
