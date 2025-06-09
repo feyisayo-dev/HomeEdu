@@ -4,9 +4,9 @@
 
 ---
 
-## 🖥 Mobile App Overview
+## 🖥 Web App Overview
 
-The **HomeEdu Mobile App** is built with React.js and focuses on improving **reading skills** through guided lessons, gamified exercises, and offline learning support.
+The **HomeEdu Web App** is built with React.js and focuses on improving **reading skills** through guided lessons, gamified exercises, and offline learning support.
 
 ### 🌟 Features
 
@@ -62,7 +62,7 @@ renderContentWithMath("The solution is $$x = {-b \\pm \\sqrt{b^2-4ac} \\over 2a}
 ### Mobile App Setup
 
 ```bash
-git clone https://github.com/your-username/homeedu.git
+git clone https://github.com/offeyicial/homeedu.git
 cd homeedu
 npm install
 npm start
