@@ -18,10 +18,10 @@ The **HomeEdu Web App** is built with React.js and focuses on improving **readin
 
 ### 🛠 Tech Stack
 
-* **Frontend:** React.js
-* **Styling:** Tailwind CSS or Material UI
-* **Backend:** Firebase or Node.js
-* **Database:** MongoDB or Firebase Firestore
+* **Frontend:** React Native
+* **Styling:**  Material UI
+* **Backend:** Laravel
+* **Database:** Mysql
 
 ---
 

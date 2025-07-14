@@ -1,4 +1,5 @@
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import LoginScreen from './screens/LoginScreen';
@@ -15,11 +16,21 @@ import ExplanationScreen from './screens/ExplanationScreen';
 import ExampleScreen from './screens/ExampleScreen';
 import ExamScreen from './screens/ExamScreen';
 import MathTestScreen from './screens/test_screen';
-
+import { useFonts } from 'expo-font';
 
 const Stack = createStackNavigator();
 
 export default function App() {
+
+  const [fontsLoaded] = useFonts({
+    'milkyCustom': require('./assets/fonts/milkyCustom.ttf'),
+    // Add more if needed
+    // 'Latto-Regular': require('./assets/fonts/LattoRegular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return <ActivityIndicator size="large" style={{ marginTop: 100 }} />;
+  }
   return (
     <UserProvider>
       <NavigationContainer>

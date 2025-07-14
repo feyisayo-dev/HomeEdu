@@ -17,29 +17,165 @@ const ExampleScreen = ({ route, navigation }) => {
     const [examples, setExamples] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const renderTableFromJson = (headers, rows) => {
+        if (!Array.isArray(headers) || !Array.isArray(rows)) return null;
+
+        return (
+            <ScrollView horizontal style={styles.scrollContainer}>
+                <View style={styles.table}>
+                    {/* Header Row */}
+                    <View style={styles.tableRow}>
+                        {headers.map((header, index) => (
+                            <View key={`header-${index}`} style={styles.headerCell}>
+                                <Text style={styles.headerText}>{header}</Text>
+                            </View>
+                        ))}
+                    </View>
+
+                    {/* Body Rows */}
+                    {rows.map((row, rowIndex) => (
+                        <View key={`row-${rowIndex}`} style={styles.tableRow}>
+                            {row.map((cell, cellIndex) => (
+                                <View key={`cell-${rowIndex}-${cellIndex}`} style={styles.tableCell}>
+                                    {Array.isArray(cell) ? (
+                                        <View style={styles.horizontalItems}>
+                                            {cell.map((item, itemIndex) => (
+                                                <View key={`item-${itemIndex}`} style={styles.cellBox}>
+                                                    <Text style={styles.cellText}>{item}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.cellText}>{cell}</Text>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    ))}
+                </View>
+            </ScrollView>
+        );
+    };
+
+
     useEffect(() => {
         fetchExamples();
     }, []);
     const renderContentWithMath = (text, textStyle = {}) => {
-        const parts = text.split(/(\$\$.*?\$\$)/g); // split text by $$...$$ blocks
+        if (typeof text !== 'string') return null;
 
-        return (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                {parts.map((part, index) => {
-                    if (part.startsWith('$$') && part.endsWith('$$')) {
-                        const math = part.slice(2, -2).trim();
-                        return <ErrorSafeMath key={`math-${index}`} math={math} />;
+        const lines = text.split('\n');
+        const elements = [];
+        let pendingHeaders = [];
+
+        // Helper to render inline text with **bold** and {color}text{/}
+        const renderStyledText = (rawText, keyPrefix = 'styled') => {
+            const fragments = [];
+
+            // Step 1: Split by LaTeX
+            const parts = rawText.split(/(\$\$.*?\$\$)/g);
+
+            parts.forEach((part, i) => {
+                if (part.startsWith('$$') && part.endsWith('$$')) {
+                    fragments.push(
+                        <ErrorSafeMath key={`${keyPrefix}-math-${i}`} math={part.slice(2, -2).trim()} />
+                    );
+                } else {
+                    // Step 2: Handle bold and color
+                    const subParts = part.split(/(\*\*.*?\*\*|\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*?\{\/\})/g);
+
+                    subParts.forEach((sub, j) => {
+                        if (sub.startsWith('**') && sub.endsWith('**')) {
+                            const boldText = sub.slice(2, -2);
+                            fragments.push(
+                                <Text key={`${keyPrefix}-bold-${i}-${j}`} style={[textStyle, { fontWeight: 'bold' }]}>
+                                    {boldText}
+                                </Text>
+                            );
+                        } else if (sub.match(/^\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*\{\/\}$/)) {
+                            const colorMatch = sub.match(/^\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}(.*)\{\/\}$/);
+                            const color = colorMatch[1];
+                            const content = colorMatch[2];
+                            fragments.push(
+                                <Text key={`${keyPrefix}-color-${i}-${j}`} style={[textStyle, { color }]}>
+                                    {content}
+                                </Text>
+                            );
+                        } else {
+                            fragments.push(
+                                <Text key={`${keyPrefix}-text-${i}-${j}`} style={textStyle}>
+                                    {sub}
+                                </Text>
+                            );
+                        }
+                    });
+                }
+            });
+
+            return fragments;
+        };
+
+        lines.forEach((line, index) => {
+            const trimmed = line.trim();
+
+            // 🔹 List item
+            if (trimmed.startsWith('-')) {
+                elements.push(
+                    <View key={`list-${index}`} style={styles.bulletItem}>
+                        <Text style={styles.bulletDot}>•</Text>
+                        <Text style={styles.bulletText}>
+                            {renderStyledText(trimmed.slice(1).trim(), `list-${index}`)}
+                        </Text>
+                    </View>
+                );
+            }
+
+            // 🔹 Table headers
+            else if (trimmed.startsWith('~')) {
+                pendingHeaders.push(trimmed.replace(/^~+/, '').trim());
+            }
+
+            // 🔹 Table data
+            else if (trimmed.startsWith('[[')) {
+                try {
+                    const rows = JSON.parse(trimmed);
+                    if (pendingHeaders.length && Array.isArray(rows)) {
+                        elements.push(
+                            <View key={`table-${index}`}>
+                                {renderTableFromJson(pendingHeaders, rows)}
+                            </View>
+                        );
+                        pendingHeaders = [];
                     } else {
-                        return (
-                            <Text key={`text-${index}`} style={textStyle}>
-                                {part}
+                        elements.push(
+                            <Text key={`invalid-table-${index}`} style={{ color: 'red' }}>
+                                ⚠️ Invalid table format
                             </Text>
                         );
                     }
-                })}
-            </View>
-        );
+                } catch (err) {
+                    elements.push(
+                        <Text key={`invalid-json-${index}`} style={{ color: 'orange' }}>
+                            ⚠️ Invalid JSON table data
+                        </Text>
+                    );
+                }
+            }
+
+            // 🔸 Regular styled paragraph
+            else if (trimmed.length > 0) {
+                elements.push(
+                    <Text key={`para-${index}`} style={styles.paragraphText}>
+                        {renderStyledText(trimmed, `para-${index}`)}
+                    </Text>
+                );
+            }
+        });
+
+        return <View style={{ gap: 10 }}>{elements}</View>;
     };
+
+
 
     const ErrorSafeMath = ({ math }) => {
         const [hasError, setHasError] = useState(false);
@@ -89,7 +225,7 @@ const ExampleScreen = ({ route, navigation }) => {
                 <Image source={{ uri: example.Image }} style={styles.image} />
             ) : null}
             <Text style={styles.text}>Instruction: {example.Instruction}</Text>
-                {renderContentWithMath(example.Text, styles.text)}
+            {renderContentWithMath(example.Text, styles.text)}
         </View>
     );
 
@@ -224,6 +360,94 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         color: '#fff', // White text for contrast
+    },
+    scrollContainer: {
+        marginVertical: 10,
+    },
+    table: {
+        flexDirection: 'column',
+        borderWidth: 1,
+        borderColor: '#aaa',
+    },
+    tableRow: {
+        flexDirection: 'row',
+    },
+    headerCell: {
+        minWidth: 120, // match column
+        paddingVertical: 12, // ⬅️ More vertical space
+        paddingHorizontal: 8,
+        backgroundColor: '#f0f0f0',
+        borderWidth: 1,
+        borderColor: '#aaa',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    headerText: {
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    tableCell: {
+        minWidth: 120, // exactly same as header
+        padding: 8,
+        borderWidth: 1,
+        borderColor: '#aaa',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cellBox: {
+        paddingVertical: 4,
+        paddingHorizontal: 6,
+        backgroundColor: '#eee',
+        borderRadius: 4,
+        marginHorizontal: 2,
+        borderWidth: 1,
+        borderColor: '#ccc',
+        minWidth: 20,
+    },
+
+    cellText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        color: '#333',
+    },
+
+    horizontalItems: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexWrap: 'wrap', // allows wrap if too wide
+    },
+    paragraphText: {
+        fontSize: 17,
+        lineHeight: 26,
+        color: '#222',
+        fontFamily: 'milkyCustom',
+        paddingVertical: 4,
+    },
+
+    bulletItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingLeft: 10,
+        paddingRight: 5,
+        marginBottom: 6,
+    },
+
+    bulletDot: {
+        fontSize: 16,
+        color: '#864af9',
+        marginRight: 8,
+        lineHeight: 24,
+    },
+
+    bulletText: {
+        flex: 1,
+        fontSize: 16,
+        color: '#333',
+        fontFamily: 'milkyCustom',
+        lineHeight: 24,
     },
 });
 

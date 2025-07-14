@@ -9,26 +9,183 @@ const ExplanationScreen = ({ route, navigation }) => {
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const renderContentWithMath = (text, textStyle = {}) => {
-        const parts = text.split(/(\$\$.*?\$\$)/g); // split text by $$...$$ blocks
+
+    const renderTableFromJson = (data) => {
+        if (!Array.isArray(data) || data.length !== 2) return null;
+
+        const headers = data[0];
+        const columns = data[1];
+
+        console.log("🔍 Headers:", headers);
+        console.log("📦 Columns:", columns);
 
         return (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                {parts.map((part, index) => {
-                    if (part.startsWith('$$') && part.endsWith('$$')) {
-                        const math = part.slice(2, -2).trim();
-                        return <ErrorSafeMath key={`math-${index}`} math={math} />;
+            <ScrollView horizontal style={styles.scrollContainer}>
+                <View style={styles.table}>
+                    {/* Header Row */}
+                    <View style={styles.tableRow}>
+                        {headers.map((header, index) => (
+                            <View key={`header-${index}`} style={styles.headerCell}>
+                                <Text style={styles.headerText}>{header}</Text>
+                            </View>
+                        ))}
+                    </View>
+
+                    {/* Just render raw column content for now */}
+                    <View style={styles.tableRow}>
+                        {columns.map((columnData, colIndex) => (
+                            <View key={`col-${colIndex}`} style={styles.tableCell}>
+                                {/* The 'columnData' itself is the array ["H", "T", "U"] */}
+                                {/* So we just map over 'columnData' directly */}
+                                {Array.isArray(columnData) && ( // Keep this check if columnData might not always be an array
+                                    <View style={styles.horizontalItems}>
+                                        {columnData.map((item, itemIndex) => ( // Changed from columnData[0] to columnData
+                                            <View key={`item-${itemIndex}`} style={styles.cellBox}>
+                                                <Text style={styles.cellText}>{item}</Text>
+                                            </View>
+
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            </ScrollView>
+        );
+    };
+
+    const renderContentWithMath = (text, textStyle = {}) => {
+        if (
+            Array.isArray(text) &&
+            text.length === 2 &&
+            Array.isArray(text[0]) &&
+            Array.isArray(text[1])
+        ) {
+            return renderTableFromJson(text);
+        }
+
+        if (typeof text !== 'string') return null;
+
+        const lines = text.split('\n');
+        const elements = [];
+        let pendingHeaders = [];
+
+        const renderStyledText = (rawText, keyPrefix = 'styled') => {
+            const fragments = [];
+            const parts = rawText.split(/(\$\$.*?\$\$)/g);
+
+            parts.forEach((part, i) => {
+                if (part.startsWith('$$') && part.endsWith('$$')) {
+                    fragments.push(
+                        <ErrorSafeMath key={`${keyPrefix}-math-${i}`} math={part.slice(2, -2).trim()} />
+                    );
+                } else {
+                    const subParts = part.split(/(\*\*.*?\*\*|\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*?\{\/\})/g);
+                    subParts.forEach((sub, j) => {
+                        if (sub.startsWith('**') && sub.endsWith('**')) {
+                            fragments.push(
+                                <Text key={`${keyPrefix}-bold-${i}-${j}`} style={[textStyle, { fontWeight: 'bold' }]}>
+                                    {sub.slice(2, -2)}
+                                </Text>
+                            );
+                        } else if (sub.match(/^\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*\{\/\}$/)) {
+                            const match = sub.match(/^\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}(.*?)\{\/\}$/);
+                            if (match) {
+                                fragments.push(
+                                    <Text key={`${keyPrefix}-color-${i}-${j}`} style={[textStyle, { color: match[1] }]}>
+                                        {match[2]}
+                                    </Text>
+                                );
+                            }
+                        } else {
+                            fragments.push(
+                                <Text key={`${keyPrefix}-text-${i}-${j}`} style={textStyle}>
+                                    {sub}
+                                </Text>
+                            );
+                        }
+                    });
+                }
+            });
+
+            return fragments;
+        };
+
+        lines.forEach((line, index) => {
+            const trimmed = line.trim();
+
+            // 🔸 List item
+            if (trimmed.startsWith('-')) {
+                elements.push(
+                    <View key={`list-${index}`} style={styles.bulletItem}>
+                        <Text style={styles.bulletDot}>•</Text>
+                        <Text style={styles.bulletText}>
+                            {renderStyledText(trimmed.slice(1).trim(), `list-${index}`)}
+                        </Text>
+                    </View>
+                );
+            }
+
+            // 🔹 Bullet point line (starts with ~)
+            else if (trimmed.startsWith('~')) {
+                const bulletText = trimmed.replace(/^~\s*/, '');
+                elements.push(
+                    <View key={`bullet-${index}`} style={styles.bulletItem}>
+                        <Text style={styles.bulletDot}>•</Text>
+                        <Text style={styles.bulletText}>
+                            {renderStyledText(bulletText, `bullet-${index}`)}
+                        </Text>
+                    </View>
+                );
+            }
+
+            // 🔹 Table data ([[...) — after header lines (~)
+            else if (trimmed.startsWith('[[')) {
+                try {
+                    const rows = JSON.parse(trimmed);
+                    if (pendingHeaders.length && Array.isArray(rows)) {
+                        elements.push(
+                            <View key={`table-${index}`}>
+                                {renderTableFromJson(pendingHeaders, rows)}
+                            </View>
+                        );
+                        pendingHeaders = [];
                     } else {
-                        return (
-                            <Text key={`text-${index}`} style={textStyle}>
-                                {part}
+                        elements.push(
+                            <Text key={`invalid-table-${index}`} style={{ color: 'red' }}>
+                                ⚠️ Invalid table format
                             </Text>
                         );
                     }
-                })}
-            </View>
-        );
+                } catch (err) {
+                    elements.push(
+                        <Text key={`invalid-json-${index}`} style={{ color: 'orange' }}>
+                            ⚠️ Invalid JSON table data
+                        </Text>
+                    );
+                }
+            }
+
+            // 🔹 Table headers (~) — collect only, don’t render
+            else if (trimmed.startsWith('~')) {
+                pendingHeaders.push(trimmed.replace(/^~+/, '').trim());
+            }
+
+            // 🔸 Paragraph or math
+            else if (trimmed.length > 0) {
+                elements.push(
+                    <Text key={`para-${index}`} style={styles.paragraphText}>
+                        {renderStyledText(trimmed, `para-${index}`)}
+                    </Text>
+                );
+            }
+        });
+
+        return <View style={{ gap: 10 }}>{elements}</View>;
     };
+
+
 
     const ErrorSafeMath = ({ math }) => {
         const [hasError, setHasError] = useState(false);
@@ -89,6 +246,7 @@ const ExplanationScreen = ({ route, navigation }) => {
 
     return (
         <ScrollView style={styles.container}>
+            <Text style={styles.subtopicsTitle}>{Subtopic}</Text>
             {content.map((item, index) => {
                 if (item.type === 'text') {
                     return (
@@ -139,12 +297,24 @@ const styles = StyleSheet.create({
         paddingBottom: 32,
         // marginBottom: 20,
     },
+    subtopicsTitle: {
+        fontSize: 24,
+        // fontWeight: 'bold',
+        color: '#864af9',
+        marginBottom: 24,
+        textAlign: 'center',
+        fontFamily: 'milkyCustom',
+        textTransform: 'uppercase',
+        flexWrap: 'wrap',            // 👈 Wrap long text
+        paddingHorizontal: 10,       // 👈 Optional: prevent edge cutoff
+    },
+
     text: {
         fontSize: 16,
         lineHeight: 22, // Better readability with proper line spacing
         color: '#333', // Neutral text color
         marginBottom: 16, // Space between text blocks
-        fontFamily: 'latto',
+        fontFamily: 'milkyCustom',
     },
     image: {
         width: '100%', // Full-width images
@@ -183,6 +353,94 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         color: '#fff', // White text for contrast
+    },
+    scrollContainer: {
+        marginVertical: 10,
+    },
+    table: {
+        flexDirection: 'column',
+        borderWidth: 1,
+        borderColor: '#aaa',
+    },
+    tableRow: {
+        flexDirection: 'row',
+    },
+    headerCell: {
+        minWidth: 120, // match column
+        paddingVertical: 12, // ⬅️ More vertical space
+        paddingHorizontal: 8,
+        backgroundColor: '#f0f0f0',
+        borderWidth: 1,
+        borderColor: '#aaa',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    headerText: {
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    tableCell: {
+        minWidth: 120, // exactly same as header
+        padding: 8,
+        borderWidth: 1,
+        borderColor: '#aaa',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cellBox: {
+        paddingVertical: 4,
+        paddingHorizontal: 6,
+        backgroundColor: '#eee',
+        borderRadius: 4,
+        marginHorizontal: 2,
+        borderWidth: 1,
+        borderColor: '#ccc',
+        minWidth: 20,
+    },
+
+    cellText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        color: '#333',
+    },
+
+    horizontalItems: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexWrap: 'wrap', // allows wrap if too wide
+    },
+    paragraphText: {
+        fontSize: 17,
+        lineHeight: 26,
+        color: '#222',
+        fontFamily: 'milkyCustom',
+        paddingVertical: 4,
+    },
+
+    bulletItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingLeft: 10,
+        paddingRight: 5,
+        marginBottom: 6,
+    },
+
+    bulletDot: {
+        fontSize: 16,
+        color: '#864af9',
+        marginRight: 8,
+        lineHeight: 24,
+    },
+
+    bulletText: {
+        flex: 1,
+        fontSize: 16,
+        color: '#864af9',
+        fontFamily: 'milkyCustom',
+        lineHeight: 24,
     },
 });
 
