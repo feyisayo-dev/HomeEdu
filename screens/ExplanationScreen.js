@@ -72,17 +72,27 @@ const ExplanationScreen = ({ route, navigation }) => {
         let pendingHeaders = [];
 
         const renderStyledText = (rawText, keyPrefix = 'styled') => {
+            if (typeof rawText !== 'string') {
+                console.warn('⚠️ renderStyledText received non-string:', rawText);
+                return null;
+            }
+
             const fragments = [];
-            const parts = rawText.split(/(\$\$.*?\$\$)/g);
+            const parts = rawText.split(/(\$\$.*?\$\$)/g).filter(Boolean); // remove falsy values like undefined or ''
 
             parts.forEach((part, i) => {
+                if (typeof part !== 'string') return; // skip non-string fragments
+
                 if (part.startsWith('$$') && part.endsWith('$$')) {
                     fragments.push(
                         <ErrorSafeMath key={`${keyPrefix}-math-${i}`} math={part.slice(2, -2).trim()} />
                     );
                 } else {
-                    const subParts = part.split(/(\*\*.*?\*\*|\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*?\{\/\})/g);
+                    const subParts = part.split(/(\*\*.*?\*\*|\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*?\{\/\})/g).filter(Boolean);
+
                     subParts.forEach((sub, j) => {
+                        if (typeof sub !== 'string') return; // extra guard
+
                         if (sub.startsWith('**') && sub.endsWith('**')) {
                             fragments.push(
                                 <Text key={`${keyPrefix}-bold-${i}-${j}`} style={[textStyle, { fontWeight: 'bold' }]}>
@@ -111,6 +121,7 @@ const ExplanationScreen = ({ route, navigation }) => {
 
             return fragments;
         };
+
 
         lines.forEach((line, index) => {
             const trimmed = line.trim();
@@ -218,7 +229,7 @@ const ExplanationScreen = ({ route, navigation }) => {
                 const response = await axios.get(
                     `https://homeedu.fsdgroup.com.ng/api/explanation/${subtopicId}`
                 );
-
+                console.log("API Response:", response.data);
                 if (response.data.status === 200) {
                     const explanationData = response.data.data[0]; // Get the first explanation object
                     if (explanationData && explanationData.Content) {
@@ -314,7 +325,7 @@ const styles = StyleSheet.create({
         lineHeight: 22, // Better readability with proper line spacing
         color: '#333', // Neutral text color
         marginBottom: 16, // Space between text blocks
-        fontFamily: 'milkyCustom',
+        // fontFamily: 'milkyCustom',
     },
     image: {
         width: '100%', // Full-width images
@@ -416,7 +427,7 @@ const styles = StyleSheet.create({
         fontSize: 17,
         lineHeight: 26,
         color: '#222',
-        fontFamily: 'milkyCustom',
+        // fontFamily: 'milkyCustom',
         paddingVertical: 4,
     },
 
@@ -439,7 +450,7 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
         color: '#864af9',
-        fontFamily: 'milkyCustom',
+        // fontFamily: 'milkyCustom',
         lineHeight: 24,
     },
 });

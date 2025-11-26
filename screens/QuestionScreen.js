@@ -153,7 +153,7 @@ const QuestionScreen = ({ route, navigation }) => {
             } else {
                 // Fallback to default subtopic fetch
                 try {
-                    const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/questions/${subtopicId}`, {
+                    const response = await axios.post(`https://homeedu.fsdgroup.com.ng/api/questions/${subtopic}`, {
                         class: userData.class,
                     });
 

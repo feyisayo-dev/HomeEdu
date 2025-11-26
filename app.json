@@ -41,7 +41,8 @@
       "url": "https://u.expo.dev/73dafd1b-c779-4fd4-8b71-eeb16892019b"
     },
     "plugins": [
-      "expo-video"
+      "expo-video",
+      "expo-font"
     ]
   }
 }

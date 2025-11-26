@@ -26,12 +26,12 @@ const ExamScreen = ({ route, navigation }) => {
     const toggleSubject = (subject) => {
         const isSelected = selectedSubjects.includes(subject);
         const isJamb = userData.class?.toLowerCase() === 'jamb'; // check class name
-
         if (!isJamb) {
-            // For non-JAMB classes, allow only one subject
-            if (!isSelected && selectedSubjects.length >= 1) {
-                Alert.alert('Limit Reached', 'You can only select 1 subject.');
-                return;
+            if (type === 'classExam') {
+                if (!isSelected && selectedSubjects.length >= 1) {
+                    Alert.alert('Limit Reached', 'You can only select 1 subject.');
+                    return;
+                }
             }
         } else {
             // For JAMB, allow up to 4
@@ -44,13 +44,13 @@ const ExamScreen = ({ route, navigation }) => {
         if (isSelected) {
             setSelectedSubjects((prev) => prev.filter((s) => s !== subject));
         } else {
-            // For non-JAMB, replace the existing selection
-            if (!isJamb) {
+            if (type === "classExam") {
                 setSelectedSubjects([subject]);
             } else {
                 setSelectedSubjects((prev) => [...prev, subject]);
             }
         }
+
     };
 
 
@@ -61,7 +61,7 @@ const ExamScreen = ({ route, navigation }) => {
             return;
         }
         Alert.alert("These are the selected subject(s)", selectedSubjects.join(', '));
-        if(type === 'classExam') {
+        if (type === 'classExam') {
             let SubjectExam = selectedSubjects;
             navigation.navigate('Question', {
                 subtopicId: null,
@@ -72,17 +72,17 @@ const ExamScreen = ({ route, navigation }) => {
                 topic: null,
                 subtopic: null,
             });
-        }else{
-        // Navigate to the exam screen, passing the selected subjects
-        navigation.navigate('Question', {
-            subtopicId: null,
-            subtopic: subtopic,
-            selectedSubjects,
-            type,
-            subject,
-            topic,
-            subtopic,
-        });
+        } else {
+            // Navigate to the exam screen, passing the selected subjects
+            navigation.navigate('Question', {
+                subtopicId: null,
+                subtopic: subtopic,
+                selectedSubjects,
+                type,
+                subject,
+                topic,
+                subtopic,
+            });
         }
     };
 
@@ -109,13 +109,29 @@ const ExamScreen = ({ route, navigation }) => {
                         break;
 
                     case 'subjectExam':
-                        console.log('This is subjectId', subject);
-                        response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/topics/${subject}`);
-                        console.log('This is response', response.data.data);
-                        if (response.data.status === 200) {
-                            setSubjects(response.data.data); // set as "subjects" if you're using a single state
-                        } else {
-                            setError('Failed to load topics.');
+                        console.log('This is subject', subject);
+                        console.log('This is the class', userClass);
+                        console.log("This is the type", type);
+
+                        try {
+                            const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/topics/${subject}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ class: userClass }),
+                            });
+
+                            const data = await response.json(); // ✅ parse JSON
+                            console.log('This is data', data);
+
+                            if (data.status === 200) {
+                                setSubjects(data.data); // ✅ use parsed response
+                            } else {
+                                setError('Failed to load topics.');
+                            }
+                        } catch (err) {
+                            setError('An error occurred while fetching topics.');
                         }
                         break;
 

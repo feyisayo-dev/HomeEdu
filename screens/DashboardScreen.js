@@ -23,7 +23,7 @@ import { Picker } from '@react-native-picker/picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { Alert } from 'react-native';
-
+import * as Constants from 'expo-constants';
 const DashboardScreen = ({ route, navigation }) => {
     const { userData, setUserData } = useUser(); // Access user data from context
     const [streaks, setStreaks] = useState(0);
@@ -48,8 +48,9 @@ const DashboardScreen = ({ route, navigation }) => {
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [tempAvatar, setTempAvatar] = useState(userData.avatar);
     const [refreshing, setRefreshing] = useState(false);
-
+    const [appMode, setAppMode] = useState('free');
     const [subjects, setSubjects] = useState([]);
+
     useEffect(() => {
         if (!userData) {
             // If userData is not yet set, initialize it
@@ -58,6 +59,35 @@ const DashboardScreen = ({ route, navigation }) => {
         }
     }, [userData, setUserData]);
 
+    const checkMode = async () => {
+        try {
+            console.log("🚀 Starting mode check...");
+            console.log("📋 Constants object:", Constants);
+
+            // Multiple fallback methods to get version
+            const version = Constants.expoConfig?.version ||
+                Constants.manifest?.version ||
+                Constants.manifest2?.extra?.expoClient?.version ||
+                '1.0.0';
+
+            console.log("📱 App version:", version);
+
+            const response = await axios.post('https://homeedu.fsdgroup.com.ng/api/mode', { app: version });
+            console.log("✅ API Response:", response.data);
+
+            setAppMode(response.data.mode);
+            console.log("🎯 App mode set to:", response.data.mode);
+
+        } catch (error) {
+            console.error("❌ Error checking mode:", error.message);
+            console.error("❌ Full error:", error);
+            setAppMode('free'); // fallback
+        }
+    };
+
+    useEffect(() => {
+        checkMode();
+    }, []);
     const fetchSubjects = async () => {
         try {
             console.log('This is class', userData.class);
@@ -509,10 +539,12 @@ const DashboardScreen = ({ route, navigation }) => {
         try {
             console.log("fetching leaderboard...");
             fetchLeaderboard();
-            console.log("fetching report...")
+            console.log("fetching report...");
             fetchReports();
-            console.log("fetching subject...")
+            console.log("fetching subject...");
             fetchSubjects();
+            console.log("Checking mode....");
+            checkMode();
             setRefreshing(true);
             const response = await fetch('https://homeedu.fsdgroup.com.ng/api/refresh', {
                 method: 'POST',

@@ -11,12 +11,27 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import Katex from 'react-native-katex';
+import ExampleQuestionRenderer from '../renderer/ExampleQuestionRenderer';
 
 const ExampleScreen = ({ route, navigation }) => {
     const { subtopicId, subtopic } = route.params; // Passed from the previous screen
     const [examples, setExamples] = useState([]);
     const [loading, setLoading] = useState(true);
-
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const nextHandler = () => {
+        if (currentIndex < examples.length - 1) {
+            // Go to next example
+            setCurrentIndex(currentIndex + 1);
+        } else {
+            // All examples shown → go to questions
+            navigation.navigate('Question', {
+                subtopicId: subtopicId,
+                subtopic: subtopic,
+                selectedSubjects: null,
+                type: null,
+            });
+        }
+    };
     const renderTableFromJson = (headers, rows) => {
         if (!Array.isArray(headers) || !Array.isArray(rows)) return null;
 
@@ -225,7 +240,7 @@ const ExampleScreen = ({ route, navigation }) => {
                 <Image source={{ uri: example.Image }} style={styles.image} />
             ) : null}
             <Text style={styles.text}>Instruction: {example.Instruction}</Text>
-            {renderContentWithMath(example.Text, styles.text)}
+            <ExampleQuestionRenderer example={example} />
         </View>
     );
 
@@ -246,29 +261,21 @@ const ExampleScreen = ({ route, navigation }) => {
                     <ActivityIndicator size="large" color="#864af9" />
                 </View>
             ) : examples.length > 0 ? (
-                <FlatList
-                    data={examples}
-                    keyExtractor={(item) => item.ExampleId.toString()}
-                    renderItem={({ item }) => <ExampleCard example={item} />}
-                    contentContainerStyle={styles.list}
-                />
+                <View style={styles.exampleWrapper}>
+                    <ExampleCard example={examples[currentIndex]} />
+                    {/* <Text style={styles.exampleCounter}>
+                        Example {currentIndex + 1} of {examples.length}
+                    </Text> */}
+
+                    <TouchableOpacity style={styles.button} onPress={nextHandler}>
+                        <Text style={styles.buttonText}>
+                            {currentIndex < examples.length - 1 ? 'Next Example' : 'Start Questions'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
                 <Text style={styles.noExamplesText}>No examples found.</Text>
             )}
-            <TouchableOpacity
-                style={styles.button}
-                onPress={() =>
-                    navigation.navigate('Question', {
-                        subtopicId: subtopicId,
-                        subtopic: subtopic,
-                        selectedSubjects: null,
-                        type: null,
-                    })
-
-                }
-            >
-                <Text style={styles.buttonText}>Next</Text>
-            </TouchableOpacity>
         </View>
     );
 

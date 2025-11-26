@@ -4,20 +4,31 @@ import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, 
 import { useUser } from '../context/UserContext';
 
 const TopicScreen = ({ route, navigation }) => {
-  const { subjectId } = route.params; // Get SubjectId from route params
+  const { subjectId, userClass, subject } = route.params; // Get subject from route params
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { userData, setUserData } = useUser(); // Access user data from context
 
   useEffect(() => {
-    // Fetch topics based on the subjectId
     const fetchTopics = async () => {
-      console.log("This is subjectId", subjectId)
+      console.log("This is subject", subject);
+      console.log("This is userClass", userClass);
       try {
-        const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/topics/${subjectId}`);
-        if (response.data.status === 200) {
-          setTopics(response.data.data); // Set topics from response
+        const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/topics/${subject}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ class: userClass }),
+        });
+
+        const data = await response.json(); // parse JSON body
+        console.log("This is data", data);
+
+
+        if (data.status === 200) {
+          setTopics(data.data); // Set topics from response
         } else {
           setError("Failed to load topics.");
         }
@@ -29,11 +40,12 @@ const TopicScreen = ({ route, navigation }) => {
     };
 
     fetchTopics();
-  }, [subjectId]);
+  }, [subjectId, userClass, subject]);
+
   const handleButtonPress = () => {
     navigation.navigate('Exam', {
       type: 'subjectExam',
-      subject: subjectId,
+      subject: subject,
       topic: null,
       subtopic: null,
       userClass: userData.class,
@@ -47,7 +59,7 @@ const TopicScreen = ({ route, navigation }) => {
   return (
     <View style={styles.topicSelectionContainer}>
       <View style={styles.headerRow}>
-        <Text style={styles.topicSelectionTitle}>Topics for Subject {subjectId}</Text>
+        <Text style={styles.topicSelectionTitle}>Topics for Subject {subject}</Text>
       </View>
       <FlatList
         data={topics}
@@ -56,7 +68,7 @@ const TopicScreen = ({ route, navigation }) => {
           <TouchableOpacity
             style={styles.topicItem}
             onPress={() =>
-              navigation.navigate('Subtopic', { topicId: item.TopicId, Topic: item.Topic, Subject: subjectId })
+              navigation.navigate('Subtopic', { topicId: item.TopicId, Topic: item.Topic, Subject: subject })
             }
           >
             <Image source={require('../assets/education.png')} style={styles.subImg} />

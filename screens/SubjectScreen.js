@@ -88,7 +88,7 @@ const SubjectScreen = ({ navigation }) => {
           <TouchableOpacity
             style={styles.subjectItem}
             onPress={() =>
-              navigation.navigate('Topic', { subjectId: item.Subject })
+              navigation.navigate('Topic', { subjectId: item.SubjectId, userClass: userData.class, subject: item.Subject })
             }>
             <View style={styles.subCont}>
               <Image

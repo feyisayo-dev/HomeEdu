@@ -148,8 +148,8 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
     };
 
     switch (question.type) {
-        case 'objective':
-        case 'true-false':
+        case 'multiple_choice':
+        case 'true_false':
             return (
                 <ObjectiveQuestion
                     question={question}
@@ -171,7 +171,7 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
 
             );
 
-        case 'fill-in-the-gaps':
+        case 'short_answer':
             return (
                 <FillInTheGapsQuestion
                     question={question}
