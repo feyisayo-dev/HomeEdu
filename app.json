@@ -2,7 +2,7 @@
   "expo": {
     "name": "Home Edu",
     "slug": "snack-af3caf87-beb8-4c10-bef6-e6e4059e4023",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

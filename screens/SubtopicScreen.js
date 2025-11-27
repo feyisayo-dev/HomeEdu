@@ -1,22 +1,145 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { useUser } from '../context/UserContext';
 
+const { width } = Dimensions.get('window');
+
+// Animated Subtopic Item Component
+const AnimatedSubtopicItem = ({ item, index, onPress }) => {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Entrance animation when component mounts
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        delay: index * 100, // Stagger animation
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        delay: index * 100,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Press animation
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      tension: 50,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ scale: scaleAnim }],
+      }}
+    >
+      <TouchableOpacity
+        style={styles.subtopicItem}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <Text style={styles.subtopicText}>{item.Subtopic}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+// Animated Button Component
+const AnimatedButton = ({ onPress, text }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Continuous pulse animation
+  React.useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      tension: 50,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View
+      style={{
+        transform: [{ scale: Animated.multiply(scaleAnim, pulseAnim) }],
+      }}
+    >
+      <TouchableOpacity
+        style={styles.startButton}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <Text style={styles.startButtonText}>{text}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+// Main SubtopicScreen Component
 const SubtopicScreen = ({ route, navigation }) => {
-  const { topicId, Topic, Subject } = route.params; // Get TopicId from route params
+  const { topicId, Topic, Subject } = route.params;
   const [subtopics, setSubtopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { userData, setUserData } = useUser(); // Access user data from context
+  const { userData } = useUser();
 
   useEffect(() => {
-    // Fetch subtopics based on the topicId
     const fetchSubtopics = async () => {
       try {
         const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/subtopics/${topicId}`);
         if (response.data.status === 200) {
-          setSubtopics(response.data.data); // Set subtopics from response
+          setSubtopics(response.data.data);
         } else {
           setError("Failed to load subtopics.");
         }
@@ -38,10 +161,10 @@ const SubtopicScreen = ({ route, navigation }) => {
       subtopic: null,
       userClass: userData.class,
     });
-  }
+  };
 
-  if (loading) return <ActivityIndicator size="large" color="#0000ff" />; // Show loading spinner
-  if (error) return <Text>{error}</Text>; // Show error message if any
+  if (loading) return <ActivityIndicator size="large" color="#864AF9" style={{ flex: 1, justifyContent: 'center' }} />;
+  if (error) return <Text style={styles.errorText}>{error}</Text>;
 
   return (
     <View style={styles.subtopicsContainer}>
@@ -52,88 +175,106 @@ const SubtopicScreen = ({ route, navigation }) => {
       <FlatList
         data={subtopics}
         keyExtractor={(item) => item.SubtopicId.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.subtopicItem}
+        renderItem={({ item, index }) => (
+          <AnimatedSubtopicItem
+            item={item}
+            index={index}
             onPress={() =>
-              navigation.navigate('Explanation', { subtopicId: item.SubtopicId, Subtopic: item.Subtopic })
+              navigation.navigate('Explanation', {
+                subtopicId: item.SubtopicId,
+                Subtopic: item.Subtopic,
+              })
             }
-          >
-            <Text style={styles.subtopicText}>{item.Subtopic}</Text>
-          </TouchableOpacity>
+          />
         )}
         contentContainerStyle={styles.subtopicsList}
         showsVerticalScrollIndicator={false}
       />
-      <TouchableOpacity
-        style={[styles.startButton]}
-        onPress={handleButtonPress}>
-        <Text style={styles.startButtonText}>Take Exam</Text>
-      </TouchableOpacity>
-    </View>
 
+      <AnimatedButton onPress={handleButtonPress} text="Take Exam" />
+    </View>
   );
 };
 
-// Define styles here
 const styles = StyleSheet.create({
   subtopicsContainer: {
     flex: 1,
-    backgroundColor: '#f9f9f9', // Light gray background
+    backgroundColor: '#F8F9FE',
     padding: 16,
   },
-  subtopicsTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#864af9', // Purple-themed color
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 24,
-    textAlign: 'center', // Center-align the title
-    fontFamily: 'latto',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  subtopicsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2D3748',
+    letterSpacing: 0.3,
+    flex: 1,
+    flexShrink: 1,
   },
   subtopicsList: {
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
   subtopicItem: {
-    //backgroundColor: '#D8C9F4', // Light purple background E9E2F8
-    backgroundColor: '#E9E2F8', // Light purple background E9E2F8
-    //opacity: 0.6,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderLeftWidth: 6,
-    //borderColor: '#673ab7', // Purple border
-    borderColor: '#864af9', // Purple border
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3, // Elevation for Android
-    alignItems: 'start', // Center the text
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 20,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderLeftWidth: 5,
+    borderLeftColor: '#864AF9',
+    marginBottom: 14,
+    shadowColor: '#864AF9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
   subtopicText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333', // Neutral text color
-    fontFamily: 'latto',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#2D3748',
+    letterSpacing: 0.2,
+    lineHeight: 24,
   },
   startButton: {
-    backgroundColor: '#864af9',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    backgroundColor: '#864AF9',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    shadowColor: '#864AF9',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
   },
   startButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  errorText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    fontFamily: 'latto',
+    color: '#F56565',
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
-
 
 export default SubtopicScreen;

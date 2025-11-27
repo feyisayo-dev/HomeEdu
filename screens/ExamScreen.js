@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -6,26 +6,221 @@ import {
     TouchableOpacity,
     FlatList,
     Alert,
-    ScrollView,
     ActivityIndicator,
     Image,
+    Animated,
+    Dimensions,
 } from 'react-native';
 import axios from 'axios';
 import { useUser } from '../context/UserContext';
 import Checkbox from 'expo-checkbox';
 
+const { width } = Dimensions.get('window');
 
+// Animated Subject Item Component
+const AnimatedSubjectItem = ({ item, index, isSelected, onPress, type }) => {
+    const scaleAnim = useRef(new Animated.Value(0)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const checkboxScale = useRef(new Animated.Value(1)).current;
+
+    // Entrance animation
+    React.useEffect(() => {
+        Animated.parallel([
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                delay: index * 80,
+                tension: 50,
+                friction: 7,
+                useNativeDriver: true,
+            }),
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                delay: index * 80,
+                duration: 400,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, []);
+
+    // Checkbox animation when selected
+    React.useEffect(() => {
+        if (isSelected) {
+            Animated.sequence([
+                Animated.spring(checkboxScale, {
+                    toValue: 1.3,
+                    tension: 100,
+                    friction: 3,
+                    useNativeDriver: true,
+                }),
+                Animated.spring(checkboxScale, {
+                    toValue: 1,
+                    tension: 100,
+                    friction: 5,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }
+    }, [isSelected]);
+
+    const handlePressIn = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 0.95,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            tension: 50,
+            friction: 5,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    let displayText = '';
+    let itemId = '';
+
+    if (type === 'classExam') {
+        displayText = item.Subject;
+        itemId = item.Subject;
+    } else if (type === 'subjectExam') {
+        displayText = item.Topic;
+        itemId = item.Topic;
+    } else if (type === 'topicExam') {
+        displayText = item.Subtopic;
+        itemId = item.Subtopic;
+    }
+
+    return (
+        <Animated.View
+            style={{
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+            }}
+        >
+            <TouchableOpacity
+                style={[
+                    styles.subjectItem,
+                    isSelected && styles.subjectItemSelected,
+                ]}
+                onPress={() => onPress(itemId)}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                activeOpacity={0.9}
+            >
+                <Animated.View style={{ transform: [{ scale: checkboxScale }] }}>
+                    <Checkbox
+                        value={isSelected}
+                        onValueChange={() => onPress(itemId)}
+                        color={isSelected ? '#864AF9' : undefined}
+                    />
+                </Animated.View>
+
+                <View style={styles.subCont}>
+                    {(type === 'classExam' || type === 'subjectExam') && (
+                        <Image
+                            source={
+                                item.Icon
+                                    ? { uri: item.Icon }
+                                    : require('../assets/education.png')
+                            }
+                            style={styles.subImg}
+                        />
+                    )}
+                    <Text style={styles.subjectText}>{displayText}</Text>
+                </View>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+};
+
+// Animated Start Button Component
+const AnimatedStartButton = ({ onPress, disabled, selectedCount }) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    // Pulse animation when enabled
+    React.useEffect(() => {
+        if (!disabled) {
+            const pulse = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 1.05,
+                        duration: 1000,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 1,
+                        duration: 1000,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+            pulse.start();
+            return () => pulse.stop();
+        } else {
+            pulseAnim.setValue(1);
+        }
+    }, [disabled]);
+
+    const handlePressIn = () => {
+        if (!disabled) {
+            Animated.spring(scaleAnim, {
+                toValue: 0.95,
+                useNativeDriver: true,
+            }).start();
+        }
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            tension: 50,
+            friction: 5,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    return (
+        <Animated.View
+            style={{
+                transform: [{ scale: disabled ? 1 : Animated.multiply(scaleAnim, pulseAnim) }],
+            }}
+        >
+            <TouchableOpacity
+                style={[
+                    styles.startButton,
+                    disabled && styles.startButtonDisabled,
+                ]}
+                onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                activeOpacity={0.9}
+                disabled={disabled}
+            >
+                <Text style={styles.startButtonText}>
+                    Start Exam {selectedCount > 0 && `(${selectedCount})`}
+                </Text>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+};
+
+// Main ExamScreen Component
 const ExamScreen = ({ route, navigation }) => {
     const [subjects, setSubjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const { userData } = useUser(); // Assuming userData contains the class info
+    const [Exam, setExam] = useState('');
+    const { userData } = useUser();
     const [selectedSubjects, setSelectedSubjects] = useState([]);
     const { type, subject, topic, subtopic, userClass } = route.params;
 
     const toggleSubject = (subject) => {
         const isSelected = selectedSubjects.includes(subject);
-        const isJamb = userData.class?.toLowerCase() === 'jamb'; // check class name
+        const isJamb = userData.class?.toLowerCase() === 'jamb';
+
         if (!isJamb) {
             if (type === 'classExam') {
                 if (!isSelected && selectedSubjects.length >= 1) {
@@ -34,33 +229,46 @@ const ExamScreen = ({ route, navigation }) => {
                 }
             }
         } else {
-            // For JAMB, allow up to 4
-            if (!isSelected && selectedSubjects.length >= 4) {
-                Alert.alert('Limit Reached', 'You can only select up to 4 subjects.');
-                return;
+            if (type === 'classExam') {
+                if (!isSelected && selectedSubjects.length >= 4) {
+                    Alert.alert('Limit Reached', 'You can only select up to 4 subjects.');
+                    return;
+                }
             }
         }
 
         if (isSelected) {
             setSelectedSubjects((prev) => prev.filter((s) => s !== subject));
         } else {
-            if (type === "classExam") {
+            if (type === 'classExam') {
                 setSelectedSubjects([subject]);
             } else {
                 setSelectedSubjects((prev) => [...prev, subject]);
             }
         }
-
     };
 
-
+    useEffect(() => {
+        const changeExamTitleName = () => {
+            if (type === 'classExam') {
+                setExam('subject');
+            }
+            if (type === 'subjectExam') {
+                setExam('topic');
+            }
+            if (type === 'topicExam') {
+                setExam('subtopic');
+            }
+        };
+        changeExamTitleName();
+    }, [type]);
 
     const handleStartExam = () => {
         if (selectedSubjects.length < 1) {
             Alert.alert('No Subject Selected', 'Select at least 1 subject.');
             return;
         }
-        Alert.alert("These are the selected subject(s)", selectedSubjects.join(', '));
+        Alert.alert('These are the selected subject(s)', selectedSubjects.join(', '));
         if (type === 'classExam') {
             let SubjectExam = selectedSubjects;
             navigation.navigate('Question', {
@@ -73,7 +281,6 @@ const ExamScreen = ({ route, navigation }) => {
                 subtopic: null,
             });
         } else {
-            // Navigate to the exam screen, passing the selected subjects
             navigation.navigate('Question', {
                 subtopicId: null,
                 subtopic: subtopic,
@@ -90,17 +297,14 @@ const ExamScreen = ({ route, navigation }) => {
         const fetchData = async () => {
             setLoading(true);
             setError('');
-            console.log('This is type', type);
             try {
                 let response;
 
                 switch (type) {
                     case 'classExam':
-                        console.log('This is class', userData.class);
                         response = await axios.post('https://homeedu.fsdgroup.com.ng/api/subjects', {
                             class: userData.class,
                         });
-                        console.log('This is response', response.data.data);
                         if (response.data.status === 200) {
                             setSubjects(response.data.data);
                         } else {
@@ -109,10 +313,6 @@ const ExamScreen = ({ route, navigation }) => {
                         break;
 
                     case 'subjectExam':
-                        console.log('This is subject', subject);
-                        console.log('This is the class', userClass);
-                        console.log("This is the type", type);
-
                         try {
                             const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/topics/${subject}`, {
                                 method: 'POST',
@@ -122,11 +322,9 @@ const ExamScreen = ({ route, navigation }) => {
                                 body: JSON.stringify({ class: userClass }),
                             });
 
-                            const data = await response.json(); // ✅ parse JSON
-                            console.log('This is data', data);
-
+                            const data = await response.json();
                             if (data.status === 200) {
-                                setSubjects(data.data); // ✅ use parsed response
+                                setSubjects(data.data);
                             } else {
                                 setError('Failed to load topics.');
                             }
@@ -136,11 +334,9 @@ const ExamScreen = ({ route, navigation }) => {
                         break;
 
                     case 'topicExam':
-                        console.log('This is topicId', topic);
                         response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/subtopics/${topic}`);
-                        console.log('This is response', response.data.data);
                         if (response.data.status === 200) {
-                            setSubjects(response.data.data); // same here
+                            setSubjects(response.data.data);
                         } else {
                             setError('Failed to load subtopics.');
                         }
@@ -159,11 +355,10 @@ const ExamScreen = ({ route, navigation }) => {
         fetchData();
     }, [type, subject, topic, userData.class]);
 
-
     if (loading) {
         return (
             <View style={styles.center}>
-                <ActivityIndicator size="large" color="#0000ff" />
+                <ActivityIndicator size="large" color="#864AF9" />
             </View>
         );
     }
@@ -178,80 +373,52 @@ const ExamScreen = ({ route, navigation }) => {
 
     return (
         <View style={styles.subjectSelectionContainer}>
-            <Text style={styles.subjectSelectionTitle}>
-                Select subjects for {userData.class}
-            </Text>
+            <View style={styles.headerCard}>
+                <Text style={styles.subjectSelectionTitle}>
+                    Select {Exam} for {userData.class}
+                </Text>
+                {selectedSubjects.length > 0 && (
+                    <Text style={styles.selectionCount}>
+                        {selectedSubjects.length} selected
+                    </Text>
+                )}
+            </View>
+
             <FlatList
                 data={subjects}
                 keyExtractor={(item) => {
                     if (type === 'classExam') return item.SubjectId.toString();
                     if (type === 'subjectExam') return item.TopicId.toString();
                     if (type === 'topicExam') return item.SubtopicId.toString();
-                    return item.id?.toString(); // fallback
+                    return item.id?.toString();
                 }}
-                renderItem={({ item }) => {
-                    let displayText = '';
+                renderItem={({ item, index }) => {
                     let itemId = '';
-
-                    if (type === 'classExam') {
-                        displayText = item.Subject;
-                        itemId = item.Subject;
-                    } else if (type === 'subjectExam') {
-                        displayText = item.Topic;
-                        itemId = item.Topic;
-                    } else if (type === 'topicExam') {
-                        displayText = item.Subtopic;
-                        itemId = item.Subtopic;
-                    }
+                    if (type === 'classExam') itemId = item.Subject;
+                    else if (type === 'subjectExam') itemId = item.Topic;
+                    else if (type === 'topicExam') itemId = item.Subtopic;
 
                     const isSelected = selectedSubjects.includes(itemId);
 
                     return (
-                        <TouchableOpacity
-                            style={styles.subjectItem}
-                            onPress={() => toggleSubject(itemId)}
-                        >
-                            <Checkbox
-                                value={isSelected}
-                                onValueChange={() => toggleSubject(itemId)}
-                                color={isSelected ? '#864af9' : undefined}
-                            />
-
-                            <View style={styles.subCont}>
-                                {type === 'subjectExam' && (
-                                    <Image
-                                        source={
-                                            item.Icon
-                                                ? { uri: item.Icon }
-                                                : require('../assets/education.png')
-                                        }
-                                        style={styles.subImg}
-                                    />
-                                )}
-                                {type === 'classExam' && (
-                                    <Image
-                                        source={
-                                            item.Icon
-                                                ? { uri: item.Icon }
-                                                : require('../assets/education.png')
-                                        }
-                                        style={styles.subImg}
-                                    />
-                                )}
-                                <Text style={styles.subjectText}>{displayText}</Text>
-                            </View>
-                        </TouchableOpacity>
+                        <AnimatedSubjectItem
+                            item={item}
+                            index={index}
+                            isSelected={isSelected}
+                            onPress={toggleSubject}
+                            type={type}
+                        />
                     );
                 }}
                 contentContainerStyle={styles.subjectList}
                 showsVerticalScrollIndicator={false}
             />
 
-            <TouchableOpacity
-                style={[styles.startButton, selectedSubjects.length === 0 && { backgroundColor: '#ccc' }]}
-                onPress={handleStartExam}>
-                <Text style={styles.startButtonText}>Start Exam</Text>
-            </TouchableOpacity>
+            <AnimatedStartButton
+                onPress={handleStartExam}
+                disabled={selectedSubjects.length === 0}
+                selectedCount={selectedSubjects.length}
+            />
         </View>
     );
 };
@@ -259,112 +426,120 @@ const ExamScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     subjectSelectionContainer: {
         flex: 1,
-        backgroundColor: '#f4f4f4', // Light gray background
+        backgroundColor: '#F8F9FE',
         padding: 16,
     },
-    headerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    headerCard: {
+        backgroundColor: '#FFFFFF',
+        padding: 20,
+        borderRadius: 16,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
         alignItems: 'center',
-        marginBottom: 16,
     },
-
     subjectSelectionTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#864af9', // Themed color
-        marginBottom: 16,
-        textAlign: 'center', // Center-align the title
-        fontFamily: 'latto',
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#2D3748',
+        textAlign: 'center',
+        letterSpacing: 0.3,
     },
-    subjectSelectionTitleWithButton: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#864af9',
-        fontFamily: 'latto',
-    },
-
-    headerButton: {
-        backgroundColor: '#864af9',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 6,
-    },
-
-    headerButtonText: {
-        color: '#fff',
+    selectionCount: {
         fontSize: 14,
-        fontWeight: 'bold',
+        fontWeight: '600',
+        color: '#864AF9',
+        marginTop: 8,
+        backgroundColor: '#F7F3FF',
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 12,
     },
-
     subjectList: {
-        paddingBottom: 16,
-        display: 'flex',
-        flexWrap: 'wrap',
-        flexDirection: 'row',
-        alignItems: 'center',
-        // justifyContent: 'space-between'
-        gap: 20,
-        justifyContent: 'center',
+        paddingBottom: 24,
     },
     subjectItem: {
-        //backgroundColor: '#D8C9F4', // Light purple background E9E2F8
-        backgroundColor: '#E9E2F8', // Light purple background E9E2F8
-        //opacity: 0.6,
+        backgroundColor: '#FFFFFF',
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingVertical: 16,
-        paddingHorizontal: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderLeftWidth: 6,
-        //borderColor: '#673ab7', // Purple border
-        borderColor: '#864af9', // Purple border
+        paddingHorizontal: 16,
+        borderRadius: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#E2E8F0',
         marginBottom: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 3, // Elevation for Android
-        alignItems: 'start', // Center the text
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+        gap: 12,
+    },
+    subjectItemSelected: {
+        borderLeftColor: '#864AF9',
+        backgroundColor: '#F7F3FF',
+        shadowColor: '#864AF9',
+        shadowOpacity: 0.15,
+        elevation: 4,
     },
     subCont: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        paddingHorizontal: 10,
+        gap: 12,
     },
-
     subImg: {
         width: 40,
         height: 40,
-        textAlign: 'left',
-        marginLeft: '10',
-        // marginBottom: 20,
-        borderRadius: 5,
+        borderRadius: 8,
+        backgroundColor: '#F7F9FC',
     },
     subjectText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-        display: 'flex',
-        alignItems: 'center', // Center the text
-        justifyContent: 'center',
-        fontFamily: 'latto',
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#2D3748',
+        flex: 1,
+        letterSpacing: 0.2,
     },
     startButton: {
-        backgroundColor: '#864af9',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
+        backgroundColor: '#864AF9',
+        paddingVertical: 16,
+        paddingHorizontal: 32,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 16,
+        marginTop: 8,
+        marginBottom: 16,
+        shadowColor: '#864AF9',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    startButtonDisabled: {
+        backgroundColor: '#CBD5E0',
+        shadowOpacity: 0.1,
     },
     startButtonText: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        letterSpacing: 0.5,
+    },
+    center: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8F9FE',
+    },
+    errorText: {
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#fff',
-        fontFamily: 'latto',
+        color: '#F56565',
+        textAlign: 'center',
+        marginTop: 20,
     },
 });
 

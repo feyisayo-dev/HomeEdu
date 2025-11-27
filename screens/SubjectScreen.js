@@ -7,7 +7,10 @@ import {
   FlatList,
   ActivityIndicator,
   Image,
+  Dimensions,
 } from 'react-native';
+const { width } = Dimensions.get('window');
+
 import axios from 'axios';
 import { useUser } from '../context/UserContext';
 
@@ -72,7 +75,7 @@ const SubjectScreen = ({ navigation }) => {
     <View style={styles.subjectSelectionContainer}>
       <View style={styles.headerRow}>
         <Text style={styles.subjectSelectionTitleWithButton}>
-          Subjects for Class {userData.class}
+          {userData.class} Subjects
         </Text>
         <TouchableOpacity
           style={styles.headerButton}
@@ -113,94 +116,116 @@ const SubjectScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   subjectSelectionContainer: {
     flex: 1,
-    backgroundColor: '#f4f4f4', // Light gray background
+    backgroundColor: '#F8F9FE',
     padding: 16,
   },
+
+  // Header Section
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
 
   subjectSelectionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#864af9', // Themed color
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#2D3748',
     marginBottom: 16,
-    textAlign: 'center', // Center-align the title
-    fontFamily: 'latto',
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
+
   subjectSelectionTitleWithButton: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#864af9',
-    fontFamily: 'latto',
+    fontWeight: '700',
+    color: '#2D3748',
+    flex: 1,
+    flexShrink: 1,
+    numberOfLines: 1, 
+    letterSpacing: 0.3,
   },
 
   headerButton: {
-    backgroundColor: '#864af9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    backgroundColor: '#864AF9',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: '#864AF9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   headerButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
+  // Subject List
   subjectList: {
-    paddingBottom: 16,
-    display: 'flex',
-    flexWrap: 'wrap',
+    paddingBottom: 24,
     flexDirection: 'row',
-    alignItems: 'center',
-    // justifyContent: 'space-between'
-    gap: 20,
-    justifyContent: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 16,
   },
+
   subjectItem: {
-    backgroundColor: '#fcfcfc', // Light blue background
-    // paddingVertical: 16,
-    //paddingHorizontal: 12,
-    borderRadius: 8,
-    //borderWidth: 1,
-    //borderColor: '#007bff', // Border matching the theme
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3, // Elevation for Android
-    display: 'flex',
-    alignItems: 'center', // Center the text
-    justifyContent: 'center',
-    height: 200,
-    width: 160,
+    shadowRadius: 12,
+    elevation: 5,
+    width: (width - 48) / 2, // Two columns with gap
+    height: 180,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(134, 74, 249, 0.1)',
   },
+
   subCont: {
-    display: 'flex',
-    alignItems: 'center', // Center the text
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    textAlign: 'center',
+    padding: 16,
   },
+
   subImg: {
-    width: 40,
-    height: 40,
-    textAlign: 'center',
-    margin: 'auto',
-    marginBottom: 20,
+    width: 56,
+    height: 56,
+    marginBottom: 16,
+    // tintColor: '#864AF9', // Applies color to icon if it's monochrome
   },
+
   subjectText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    display: 'flex',
-    alignItems: 'center', // Center the text
-    justifyContent: 'center',
-    fontFamily: 'latto',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2D3748',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+    lineHeight: 22,
+  },
+
+  // Optional: Add hover/press effect styles
+  subjectItemPressed: {
+    backgroundColor: '#F7F9FC',
+    transform: [{ scale: 0.98 }],
   },
 });
 

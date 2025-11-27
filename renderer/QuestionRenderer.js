@@ -1,17 +1,26 @@
-import React, { useState } from 'react';
-import { View, Text, Image, TextInput, StyleSheet } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, Image, TextInput, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { RadioButton } from 'react-native-paper';
-import Katex  from 'react-native-katex';
+import Katex from 'react-native-katex';
 
 const renderContentWithMath = (text, textStyle = {}) => {
-    const parts = text.split(/(\$\$.*?\$\$)/g); // split text by $$...$$ blocks
+    // 1. Use [\s\S] to match newlines inside math blocks safeley
+    const parts = text.split(/(\$\$[\s\S]*?\$\$)/g);
 
     return (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+        <View style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center', // Aligns text and math vertically
+        }}>
             {parts.map((part, index) => {
                 if (part.startsWith('$$') && part.endsWith('$$')) {
                     const math = part.slice(2, -2).trim();
-                    return <ErrorSafeMath key={`math-${index}`} math={math} />;
+                    return (
+                        <View key={`math-${index}`} style={{ width: '100%', marginVertical: 8 }}>
+                            <ErrorSafeMath math={math} />
+                        </View>
+                    );
                 } else {
                     return (
                         <Text key={`text-${index}`} style={textStyle}>
@@ -23,127 +32,315 @@ const renderContentWithMath = (text, textStyle = {}) => {
         </View>
     );
 };
-
 const ErrorSafeMath = ({ math }) => {
     const [hasError, setHasError] = useState(false);
-
     if (hasError) {
-        console.warn("❌ Math rendering failed for:", math);
-        return (
-            <Text style={{ color: 'red', fontStyle: 'italic' }}>
-                Failed to render: {math}
-            </Text>
-        );
+        return <Text style={{ color: '#F56565', fontStyle: 'italic' }}>[Math formula]</Text>;
     }
-
     return (
         <Katex
             expression={math}
-            displayMode={false}
+            displayMode={false} // <--- FALSE: Keeps it in the sentence line
             throwOnError={false}
-            errorColor="#f00"
-            style={{ minHeight: 30 }}
+            // removed fixed height/width here to let CSS handle it
+            style={{}}
             inlineStyle={inlineStyle}
             onError={() => setHasError(true)}
-            onLoad={() => console.log("✅ Loaded:", math)}
         />
     );
 };
 
+// 3. Use CSS to make the font big, even in inline mode
 const inlineStyle = `
 html, body {
-  background-color: transparent;
   margin: 0;
   padding: 0;
+  background-color: transparent;
+  display: flex;
+  align-items: center; 
 }
 .katex {
-  font-size: 4em;
+  font-size: 3em;       /* <--- Controls the size manually */
+  margin: 0 4px;         /* Adds small breathing room around math */
+  padding: 0;
+  line-height: 1.2;
 }
 `;
+// const inlineStyle = `
+// html, body {
+//   display: block;
+//   margin: 0;
+//   padding: 0;
+// }
+// .katex {
+//   vertical-align: middle;
+//   font-size: 20px;
+//   line-height: 1.0;
+// }
 
-const ObjectiveQuestion = ({ question, selectedOption, onSelection, borderColor }) => (
-    <View style={[styles.questionContainer, { borderColor }]}>
-        {question.image && (
-            <Image source={{ uri: question.image }} style={styles.questionImage} />
-        )}
+// .katex-html{
+//  overflow: visible !important; 
+//  }
+// .katex-display {
+//   margin: 0;
+//    overflow: visible !important; 
+// }
+// `;
 
-        <View style={{ marginBottom: 16 }}>
-            {renderContentWithMath(question.content, styles.questionText)}
-        </View>
+// Animated Option Component
+const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmitted }) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const selectedAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
 
-        <RadioButton.Group onValueChange={onSelection} value={selectedOption}>
-            {question.options.map((option, index) => (
-                <View key={index} style={styles.optionContainer}>
-                    <RadioButton value={option} />
-                    <View style={{ marginLeft: 8, flex: 1 }}>
+    useEffect(() => {
+        Animated.timing(selectedAnim, {
+            toValue: isSelected ? 1 : 0,
+            duration: 200,
+            useNativeDriver: false,
+        }).start();
+    }, [isSelected]);
+
+    const handlePressIn = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 0.97,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            tension: 50,
+            friction: 5,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const backgroundColor = selectedAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['#FFFFFF', '#F7F3FF'],
+    });
+
+    const borderColor = selectedAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['#E2E8F0', '#864AF9'],
+    });
+
+    // Override colors if submitted
+    let finalBackgroundColor = backgroundColor;
+    let finalBorderColor = borderColor;
+
+    if (isSubmitted) {
+        if (isCorrect === true) {
+            finalBackgroundColor = '#F0FFF4';
+            finalBorderColor = '#48BB78';
+        } else if (isCorrect === false && isSelected) {
+            finalBackgroundColor = '#FFF5F5';
+            finalBorderColor = '#F56565';
+        }
+    }
+
+    return (
+        <Animated.View
+            style={{
+                transform: [{ scale: scaleAnim }],
+                marginBottom: 12,
+            }}
+        >
+            <TouchableOpacity
+                onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                activeOpacity={1}
+                disabled={isSubmitted}
+            >
+                <Animated.View
+                    style={[
+                        styles.optionContainer,
+                        {
+                            backgroundColor: finalBackgroundColor,
+                            borderColor: finalBorderColor,
+                        },
+                    ]}
+                >
+                    <View style={styles.radioContainer}>
+                        <View
+                            style={[
+                                styles.radioOuter,
+                                isSelected && styles.radioOuterSelected,
+                                isSubmitted && isCorrect === true && styles.radioOuterCorrect,
+                                isSubmitted && isCorrect === false && isSelected && styles.radioOuterIncorrect,
+                            ]}
+                        >
+                            {isSelected && (
+                                <View
+                                    style={[
+                                        styles.radioInner,
+                                        isSubmitted && isCorrect === true && styles.radioInnerCorrect,
+                                        isSubmitted && isCorrect === false && styles.radioInnerIncorrect,
+                                    ]}
+                                />
+                            )}
+                        </View>
+                    </View>
+
+                    <View style={styles.optionTextContainer}>
                         {renderContentWithMath(option, styles.optionText)}
                     </View>
+
+                    {isSubmitted && isCorrect === true && (
+                        <Text style={styles.correctIcon}>✓</Text>
+                    )}
+                    {isSubmitted && isCorrect === false && isSelected && (
+                        <Text style={styles.incorrectIcon}>✗</Text>
+                    )}
+                </Animated.View>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+};
+
+const ObjectiveQuestion = ({ question, selectedOption, onSelection, isSubmitted }) => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+        }).start();
+    }, []);
+
+    return (
+        <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+            {question.image && (
+                <View style={styles.imageContainer}>
+                    <Image source={{ uri: question.image }} style={styles.questionImage} />
                 </View>
-            ))}
-        </RadioButton.Group>
-    </View>
-);
+            )}
 
+            <View style={styles.questionTextContainer}>
+                {renderContentWithMath(question.content, styles.questionText)}
+            </View>
 
-const TheoryQuestion = ({ question, onAnswerChange, borderColor, value }) => (
-    <View style={[styles.questionContainer, { borderColor }]}>
-        {question.image && (
-            <Image source={{ uri: question.image }} style={styles.questionImage} />
-        )}
-        <View style={{ marginBottom: 8 }}>
-            {renderContentWithMath(question.content, styles.questionText)}
-        </View>
-        <TextInput
-            style={styles.textArea}
-            placeholder="Write your answer here"
-            multiline
-            numberOfLines={4}
-            onChangeText={onAnswerChange}
-            value={value}
-        />
-    </View>
+            <View style={styles.optionsWrapper}>
+                {question.options.map((option, index) => {
+                    const isSelected = selectedOption === option;
+                    const isCorrect = isSubmitted ? option === question.answer : null;
 
-);
+                    return (
+                        <AnimatedOption
+                            key={index}
+                            option={option}
+                            index={index}
+                            isSelected={isSelected}
+                            onPress={() => !isSubmitted && onSelection(option)}
+                            isCorrect={isCorrect}
+                            isSubmitted={isSubmitted}
+                        />
+                    );
+                })}
+            </View>
+        </Animated.View>
+    );
+};
 
-const FillInTheGapsQuestion = ({ question, onAnswerChange, borderColor, value }) => (
-    <View style={[styles.questionContainer, { borderColor }]}>
-        {question.image && (
-            <Image source={{ uri: question.image }} style={styles.questionImage} />
-        )}
-        <View style={{ marginBottom: 8 }}>
-            {renderContentWithMath(question.content, styles.questionText)}
-        </View>
-        <TextInput
-            style={styles.input}
-            placeholder="Fill in the blank"
-            onChangeText={onAnswerChange}
-            value={value}
-        />
-    </View>
+const TheoryQuestion = ({ question, onAnswerChange, value, isSubmitted }) => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const [isFocused, setIsFocused] = useState(false);
 
-);
+    useEffect(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+        }).start();
+    }, []);
 
+    return (
+        <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+            {question.image && (
+                <View style={styles.imageContainer}>
+                    <Image source={{ uri: question.image }} style={styles.questionImage} />
+                </View>
+            )}
 
+            <View style={styles.questionTextContainer}>
+                {renderContentWithMath(question.content, styles.questionText)}
+            </View>
 
-const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
-    console.log('🧠 Rendering question:', question.content);
+            <TextInput
+                style={[
+                    styles.textArea,
+                    isFocused && styles.textAreaFocused,
+                    isSubmitted && styles.textAreaSubmitted,
+                ]}
+                placeholder="Write your answer here..."
+                placeholderTextColor="#A0AEC0"
+                multiline
+                numberOfLines={6}
+                onChangeText={onAnswerChange}
+                value={value}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                editable={!isSubmitted}
+            />
+        </Animated.View>
+    );
+};
+
+const FillInTheGapsQuestion = ({ question, onAnswerChange, value, isSubmitted }) => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const [isFocused, setIsFocused] = useState(false);
+
+    useEffect(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+        }).start();
+    }, []);
+
+    return (
+        <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+            {question.image && (
+                <View style={styles.imageContainer}>
+                    <Image source={{ uri: question.image }} style={styles.questionImage} />
+                </View>
+            )}
+
+            <View style={styles.questionTextContainer}>
+                {renderContentWithMath(question.content, styles.questionText)}
+            </View>
+
+            <TextInput
+                style={[
+                    styles.input,
+                    isFocused && styles.inputFocused,
+                    isSubmitted && styles.inputSubmitted,
+                ]}
+                placeholder="Type your answer..."
+                placeholderTextColor="#A0AEC0"
+                onChangeText={onAnswerChange}
+                value={value}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                editable={!isSubmitted}
+            />
+        </Animated.View>
+    );
+};
+
+const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer, isSubmitted }) => {
     const handleSelection = (value) => {
-        onAnswerSelected(question.QuestionId, value);
+        if (!isSubmitted) {
+            onAnswerSelected(question.QuestionId, value);
+        }
     };
-
 
     const handleAnswerChange = (value) => {
-        onAnswerSelected(question.QuestionId, value);
-    };
-    const getBorderColor = (question) => {
-        if (question.isCorrect === undefined) {
-            return '#ddd'; // Default border color (unanswered)
-        } else if (question.isCorrect === null) {
-            return '#ddd'; // Neutral color if the answer is not yet checked
-        } else if (question.isCorrect) {
-            return 'green'; // Correct answer
-        } else {
-            return 'red'; // Incorrect answer
+        if (!isSubmitted) {
+            onAnswerSelected(question.QuestionId, value);
         }
     };
 
@@ -155,9 +352,8 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
                     question={question}
                     selectedOption={selectedAnswer}
                     onSelection={handleSelection}
-                    borderColor={getBorderColor(question)}
+                    isSubmitted={isSubmitted}
                 />
-
             );
 
         case 'theory':
@@ -165,10 +361,9 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
                 <TheoryQuestion
                     question={question}
                     onAnswerChange={handleAnswerChange}
-                    borderColor={getBorderColor(question)}
-                    value={selectedAnswer}
+                    value={selectedAnswer || ''}
+                    isSubmitted={isSubmitted}
                 />
-
             );
 
         case 'short_answer':
@@ -176,82 +371,167 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer }) => {
                 <FillInTheGapsQuestion
                     question={question}
                     onAnswerChange={handleAnswerChange}
-                    borderColor={getBorderColor(question)} // Pass borderColor as a prop
-                    value={selectedAnswer}
+                    value={selectedAnswer || ''}
+                    isSubmitted={isSubmitted}
                 />
             );
 
         default:
             return (
-                <View style={[styles.unsupportedContainer, { borderColor: '#ddd' }]}>
-                    <Text>Unsupported question type: {question.type}</Text>
+                <View style={styles.unsupportedContainer}>
+                    <Text style={styles.unsupportedText}>
+                        Unsupported question type: {question.type}
+                    </Text>
                 </View>
             );
     }
-
 };
-
-
 
 const styles = StyleSheet.create({
     questionContainer: {
-        borderWidth: 2, // Ensure border is visible
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 16,
-        backgroundColor: '#fff',
-        borderColor: '#864af9',
-        shadowColor: '#864af9',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3, // Elevation for Android
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
+    },
+    imageContainer: {
+        marginBottom: 20,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#F7F9FC',
     },
     questionImage: {
         width: '100%',
-        height: 200, // Fixed height
-        borderRadius: 8,
-        marginBottom: 12,
-        resizeMode: 'contain', // Ensure the image fits within the boundaries
+        height: 220,
+        resizeMode: 'contain',
+    },
+    questionTextContainer: {
+        marginBottom: 20,
     },
     questionText: {
         fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 16,
+        fontWeight: '600',
+        color: '#2D3748',
+        // lineHeight: 26,
+        // letterSpacing: 0.2,
+    },
+    optionsWrapper: {
+        marginTop: 8,
     },
     optionContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+        minHeight: 60,
+    },
+    radioContainer: {
+        marginRight: 12,
+    },
+    radioOuter: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#CBD5E0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+    },
+    radioOuterSelected: {
+        borderColor: '#864AF9',
+    },
+    radioOuterCorrect: {
+        borderColor: '#48BB78',
+    },
+    radioOuterIncorrect: {
+        borderColor: '#F56565',
+    },
+    radioInner: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: '#864AF9',
+    },
+    radioInnerCorrect: {
+        backgroundColor: '#48BB78',
+    },
+    radioInnerIncorrect: {
+        backgroundColor: '#F56565',
+    },
+    optionTextContainer: {
+        flex: 1,
     },
     optionText: {
         fontSize: 16,
-        color: '#555',
+        color: '#2D3748',
+        lineHeight: 22,
+    },
+    correctIcon: {
+        fontSize: 24,
+        color: '#48BB78',
+        fontWeight: 'bold',
+        marginLeft: 8,
+    },
+    incorrectIcon: {
+        fontSize: 24,
+        color: '#F56565',
+        fontWeight: 'bold',
         marginLeft: 8,
     },
     textArea: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 12,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        padding: 16,
         fontSize: 16,
-        textAlignVertical: 'top', // Align text at the top for multiline inputs
+        color: '#2D3748',
+        textAlignVertical: 'top',
+        minHeight: 120,
+        backgroundColor: '#FFFFFF',
+    },
+    textAreaFocused: {
+        borderColor: '#864AF9',
+        backgroundColor: '#F7F3FF',
+    },
+    textAreaSubmitted: {
+        borderColor: '#CBD5E0',
+        backgroundColor: '#F7F9FC',
     },
     input: {
-        borderWidth: 1,
-        borderColor: '#864af9',
-        borderRadius: 8,
-        padding: 12,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        padding: 16,
         fontSize: 16,
+        color: '#2D3748',
+        backgroundColor: '#FFFFFF',
+    },
+    inputFocused: {
+        borderColor: '#864AF9',
+        backgroundColor: '#F7F3FF',
+    },
+    inputSubmitted: {
+        borderColor: '#CBD5E0',
+        backgroundColor: '#F7F9FC',
     },
     unsupportedContainer: {
-        padding: 16,
-        backgroundColor: '#f8d7da',
-        borderRadius: 8,
-        marginBottom: 16,
+        padding: 20,
+        backgroundColor: '#FFF5F5',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#FED7D7',
+    },
+    unsupportedText: {
+        fontSize: 16,
+        color: '#C53030',
+        textAlign: 'center',
     },
 });
-
 
 export default QuestionRenderer;

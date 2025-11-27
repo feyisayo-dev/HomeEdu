@@ -12,7 +12,9 @@ import {
     StyleSheet,
     Image,
     ScrollView,
+    Dimensions,
 } from 'react-native';
+const { width } = Dimensions.get('window');
 import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { TextInput } from 'react-native';
@@ -140,6 +142,12 @@ const DashboardScreen = ({ route, navigation }) => {
     useEffect(() => {
         fetchClasses();
     }, []);
+    const truncateText = (text, max = 18) => {
+        if (!text) return null;
+        return text.length > max ? text.substring(0, max) + "..." : text;
+    };
+
+
     const fetchReports = async () => {
         try {
             const response = await axios.get(
@@ -150,10 +158,13 @@ const DashboardScreen = ({ route, navigation }) => {
                 // Map through the data and round Score to 2 decimal places
                 const roundedReports = response.data.data.map(report => ({
                     ...report,
-                    Score: Number(parseFloat(report.Score).toFixed(2))  // Round to 2 dp and convert back to number
+                    Score: Number(parseFloat(report.Score).toFixed(2)),
+                    subtopic_name: truncateText(report.subtopic_name),
+                    exam_name: truncateText(report.exam_name)
                 }));
 
                 setReports(roundedReports);
+
                 console.log("This is the report data", roundedReports);
             } else {
                 setReports([]);
@@ -651,7 +662,7 @@ const DashboardScreen = ({ route, navigation }) => {
                             animationType="slide"
                             onRequestClose={() => setModalVisible(false)}>
                             <View style={styles.modalContainer}>
-                                <View style={styles.modalContent}>
+                                <View style={[styles.modalContent, { backgroundColor: 'white' }]}>
                                     {/* Tab Navigation */}
                                     <View style={styles.tabContainer}>
                                         <TouchableOpacity
@@ -1028,254 +1039,299 @@ const DashboardScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    infoContainer: {
-        flexDirection: 'row', // Layout items horizontally
-        alignItems: 'center', // Align avatar and username vertically
-        backgroundColor: '#864AF9', // Light background for a clean look #007bff
+    container: {
+        backgroundColor: '#F8F9FE',
         padding: 16,
-        borderRadius: 8,
-        marginBottom: 16,
+        paddingBottom: 32,
+    },
 
-        display: 'flex',
-        justifyContent: 'space-between',
+    // Info/Header Section
+    infoContainer: {
+        flexDirection: 'row',
         alignItems: 'center',
-        position: 'fixed',
-        top: 0,
+        justifyContent: 'space-between',
+        backgroundColor: '#864AF9',
+        padding: 20,
+        borderRadius: 20,
+        marginBottom: 20,
+        shadowColor: '#864AF9',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
     },
-    infoAvatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25, // This is incorrect
-        marginRight: 16,
-        borderWidth: 1,
-        borderColor: '#fcfcfc',
-        objectFit: 'cover',
+    leftInfo: {
+        flex: 1,
     },
-
     hello: {
-        color: '#fcfcfc',
-        fontWeight: 400,
-        fontSize: 16,
-        fontFamily: 'latto'
+        color: 'rgba(255, 255, 255, 0.8)',
+        fontSize: 14,
+        fontWeight: '400',
+        letterSpacing: 0.5,
+        marginBottom: 4,
     },
     infoUsername: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#fcfcfc', // Text contrast with the background
-        fontFamily: 'latto'
+        fontSize: 26,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        letterSpacing: 0.3,
     },
+    infoAvatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        borderWidth: 3,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+    },
+
+    // Streaks Section
     streaksContainer: {
-        alignSelf: 'center', // Center the streaks box
-        width: '100%', // Restrict width to make it compact
-        //backgroundColor: '#0D9276', // Light background for a clean look
-        backgroundColor: '#f4f4f4', // Light background for a clean look
-        padding: 20,
-        paddingTop: 32,
-        paddingBottom: 32,
-        borderRadius: 8, // Use a theme color for the border
-        alignItems: 'center', // Center the content
-        marginBottom: 24,
+        alignSelf: 'center',
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        padding: 28,
+        borderRadius: 20,
+        alignItems: 'center',
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: 'rgba(134, 74, 249, 0.1)',
     },
     streaksTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#864af9', // Theme color for the title
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#864AF9',
         marginBottom: 8,
-        fontFamily: 'latto',
+        letterSpacing: 0.5,
     },
     streaksCount: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333', // Neutral color for the count
-        fontFamily: 'latto'
+        fontSize: 36,
+        fontWeight: '800',
+        color: '#2D3748',
+        letterSpacing: 1,
+    },
+
+    // Reports Section
+    reportsContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
     },
     title: {
-        color: '#864af9',
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#864af9', // Golden accent
-        marginBottom: 8,
-        textAlign: 'center',
-        fontFamily: 'latto'
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#2D3748',
+        marginBottom: 16,
     },
     reportItem: {
-        flexDirection: 'row', // Align subtopic and score in a row
-        justifyContent: 'space-between', // Distribute items with space between
-        alignItems: 'center', // Center vertically
-        backgroundColor: '#fff',
-        padding: 12,
-        marginBottom: 24,
-        borderRadius: 8,
-        // borderWidth: 1,
-        //borderColor: '#eee',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 1,
-        elevation: 1,
-        borderWidth: 1,
-        borderColor: '#864af9',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#F7F9FC',
+        padding: 16,
+        marginBottom: 12,
+        borderRadius: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#864AF9',
     },
     reportTitle: {
         fontSize: 16,
-        color: '#333',
-        fontWeight: 'bold',
-        flex: 3, // Allocate more space for the title
-        fontFamily: 'latto'
+        color: '#2D3748',
+        fontWeight: '600',
+        flex: 3,
     },
     reportScore: {
-        fontSize: 14,
-        color: '#864af9',
-        flex: 1, // Allocate space for the score
-        textAlign: 'right', // Align score to the right
-        fontFamily: 'latto',
-        fontWeight: 'normal'
+        fontSize: 16,
+        color: '#864AF9',
+        flex: 1,
+        textAlign: 'right',
+        fontWeight: '700',
     },
-    reportsContainer: {
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 16,
-        maxHeight: 300, // Set a fixed height for scrollable area
-        borderWidth: 1,
-        borderColor: '#864af9',
+    reportList: {
+        marginBottom: 8,
     },
     seeMoreButton: {
-        marginTop: 8,
-        paddingVertical: 12,
-        backgroundColor: '#864af9',
-        borderRadius: 8,
+        marginTop: 12,
+        paddingVertical: 14,
+        backgroundColor: '#864AF9',
+        borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#864AF9',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     seeMoreButtonText: {
-        color: '#fcfcfc',
-        fontWeight: 'bold',
+        color: '#FFFFFF',
+        fontWeight: '700',
         fontSize: 16,
-        fontFamily: 'latto',
+        letterSpacing: 0.5,
     },
+
+    // Modal Styles
     modalContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
     },
     modalContent: {
-        backgroundColor: '#fcfcfc',
-        padding: 20,
-        borderRadius: 12,
+        // backgroundColor: '#FFFFFF',
+        padding: 24,
+        borderRadius: 24,
         width: '90%',
         maxHeight: '80%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+        elevation: 12,
     },
     tabContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-around', // Distribute tabs evenly
-        marginBottom: 16,
+        justifyContent: 'space-around',
+        marginBottom: 20,
+        backgroundColor: '#F7F9FC',
+        borderRadius: 12,
+        padding: 4,
     },
     tab: {
-        flex: 1, // Each tab gets equal width
+        flex: 1,
         alignItems: 'center',
-        paddingVertical: 8,
-        borderBottomWidth: 2,
-        borderColor: 'transparent', // Default border color for inactive tabs
+        paddingVertical: 10,
+        borderRadius: 10,
+        marginHorizontal: 2,
     },
     activeTab: {
-        borderColor: '#864af9', // Highlight active tab
+        backgroundColor: '#864AF9',
+        shadowColor: '#864AF9',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 2,
     },
     tabText: {
-        fontSize: 14, // Adjust font size for better fit
-        color: '#555',
-        textAlign: 'center', // Center-align text in the tab
-        fontFamily: 'latto',
+        fontSize: 13,
+        color: '#718096',
+        textAlign: 'center',
+        fontWeight: '600',
     },
     activeTabText: {
-        color: "white", // Highlight color for active tab
-        fontWeight: 'bold',
-        fontFamily: 'latto',
+        color: '#FFFFFF',
+        fontWeight: '700',
     },
     modalReportItem: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        padding: 12,
-        backgroundColor: '#f8f8f8',
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#864af9',
+        padding: 14,
+        backgroundColor: '#F7F9FC',
+        borderRadius: 12,
+        marginBottom: 10,
+        borderLeftWidth: 3,
+        borderLeftColor: '#864AF9',
     },
     modalReportTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
-        fontFamily: 'latto',
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#2D3748',
     },
     modalReportScore: {
-        fontSize: 14,
-        color: '#864af9',
-        fontFamily: 'latto',
+        fontSize: 15,
+        color: '#864AF9',
+        fontWeight: '700',
+    },
+    modalReportList: {
+        maxHeight: 400,
     },
     modalCloseButton: {
-        marginTop: 16,
-        paddingVertical: 12,
-        backgroundColor: '#864af9',
-        borderRadius: 8,
+        marginTop: 20,
+        paddingVertical: 14,
+        backgroundColor: '#864AF9',
+        borderRadius: 12,
         alignItems: 'center',
     },
     modalCloseButtonText: {
-        color: '#fcfcfc',
-        fontWeight: 'bold',
+        color: '#FFFFFF',
+        fontWeight: '700',
         fontSize: 16,
-        fontFamily: 'latto',
     },
-    subjectsContainer: {
-        backgroundColor: '#f4f4f4', // Light blue background
-        padding: 16,
-        borderRadius: 8,
-        alignItems: 'center', // Center the content
+
+    // Timetable Section
+    timetableContainer: {
+        backgroundColor: '#FFFFFF',
+        padding: 20,
+        borderRadius: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
+    },
+    timetableTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#2D3748',
         marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#864af9',
-        borderStyle: 'dotted',
     },
-    subjectsTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#864af9', // Themed color for the title
-        marginBottom: 8,
-        fontFamily: 'latto',
+    timetableList: {
+        marginTop: 8,
     },
-    subjectsDescription: {
+    timetableItem: {
+        backgroundColor: '#F7F9FC',
+        padding: 16,
+        marginBottom: 12,
+        borderRadius: 16,
+        borderLeftWidth: 5,
+        borderLeftColor: '#864AF9',
+    },
+    subjectName: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#2D3748',
+        marginBottom: 6,
+    },
+    subjectTime: {
         fontSize: 14,
-        color: '#333', // Neutral color for description
-        marginBottom: 16,
+        color: '#718096',
+        fontWeight: '500',
+    },
+    noTimetableData: {
+        fontSize: 15,
+        color: '#A0AEC0',
         textAlign: 'center',
+        marginTop: 20,
+        fontStyle: 'italic',
     },
-    subjectsButton: {
-        backgroundColor: '#864af9',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
-    },
-    subjectsButtonText: {
-        color: '#fcfcfc',
-        fontWeight: 'bold',
-        fontSize: 16,
-        fontFamily: 'latto',
-    },
+
+    // Leaderboard Section
     leaderboardContainer: {
-        backgroundColor: '#f4f4f4',
-        padding: 16,
-        borderRadius: 8,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#ccc',
+        backgroundColor: '#FFFFFF',
+        padding: 20,
+        borderRadius: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
     },
     leaderboardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#864af9',
-        marginBottom: 8,
-        textAlign: 'center',
-        fontFamily: 'latto',
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#2D3748',
+        marginBottom: 16,
     },
     leaderboardList: {
         marginTop: 8,
@@ -1284,205 +1340,183 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#fff',
-        padding: 12,
-        marginBottom: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 1,
-        elevation: 1,
+        backgroundColor: '#F7F9FC',
+        padding: 16,
+        marginBottom: 10,
+        borderRadius: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#FFD700',
     },
     leaderboardRank: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#007bff',
-        width: 40, // Fixed width for alignment
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#864AF9',
+        width: 40,
         textAlign: 'center',
     },
     leaderboardName: {
         flex: 2,
         fontSize: 16,
-        color: '#333',
-        fontFamily: 'latto',
+        color: '#2D3748',
+        fontWeight: '600',
+        marginLeft: 12,
     },
     leaderboardScore: {
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#555',
-        fontFamily: 'latto',
+        fontWeight: '700',
+        color: '#2D3748',
     },
     noLeaderboardData: {
-        fontSize: 14,
-        color: '#888',
+        fontSize: 15,
+        color: '#A0AEC0',
         textAlign: 'center',
-        marginTop: 16,
+        marginTop: 20,
+        fontStyle: 'italic',
     },
-    timetableContainer: {
-        // backgroundColor: '#fdf8e4', // Light yellow background
-        // padding: 16,
-        borderRadius: 8,
-        marginBottom: 24,
-        //borderWidth: 1,
-        // borderColor: '#d1a83b',
-        flexDirection: 'colomn',
-        borderColo: '#864AF9',
+
+    // Subjects Section
+    subjectsContainer: {
+        backgroundColor: '#864AF9',
+        padding: 24,
+        borderRadius: 20,
+        alignItems: 'center',
+        marginBottom: 20,
+        shadowColor: '#864AF9',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
     },
-    timetableTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#864af9', // Golden accent
+    subjectsTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#FFFFFF',
         marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    subjectsDescription: {
+        fontSize: 15,
+        color: 'rgba(255, 255, 255, 0.9)',
+        marginBottom: 20,
         textAlign: 'center',
-        fontFamily: 'latto',
+        lineHeight: 22,
     },
-    timetableList: {
-        marginTop: 8,
-    },
-    timetableItem: {
-        flexDirection: 'colomn', // Align name and time in a row
-        justifyContent: 'start', // Space between subject and time
-        alignItems: 'start',
-        backgroundColor: '#fff',
-        padding: 12,
-        marginBottom: 8,
-        borderRadius: 8,
-        borderLeftWidth: 5,
-        borderColor: '#864AF9',
+    subjectsButton: {
+        backgroundColor: '#FFFFFF',
+        paddingVertical: 14,
+        paddingHorizontal: 32,
+        borderRadius: 12,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 1,
-        elevation: 1,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    subjectName: {
+    subjectsButtonText: {
+        color: '#864AF9',
+        fontWeight: '700',
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
-        flex: 2,
-        fontFamily: 'latto',
+        letterSpacing: 0.5,
     },
-    subjectTime: {
-        fontSize: 14,
-        color: '#555',
-        flex: 1,
-        textAlign: 'start',
-        fontFamily: 'latto',
-    },
-    noTimetableData: {
-        fontSize: 14,
-        color: '#888',
-        textAlign: 'center',
-        marginTop: 16,
-    },
-    container: {
-        backgroundColor: '#fff',
-        padding: 16,
-    },
-    error: {
-        color: 'red',
-    },
+
+    // Profile Modal
     modalOverlay: {
         position: 'absolute',
         top: 0,
         left: 0,
         height: '100%',
         width: '100%',
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10,
     },
-    modalContent: {
-        backgroundColor: '#864AF9',
-        padding: 20,
-        borderRadius: 20,
-        width: '85%',
-        alignItems: 'center',
-    },
+
     modalTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#fcfcfc',
-        marginBottom: 15,
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        marginBottom: 20,
+        letterSpacing: 0.5,
     },
     modalAvatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        marginBottom: 15,
-    },
-    modalLabel: {
-        fontWeight: '600',
-        fontSize: 14,
-        color: '#fcfcfc',
-        marginTop: 10,
-    },
-    modalText: {
-        fontSize: 16,
-        color: '#fcfcfc',
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 20,
-        width: '100%',
-    },
-    logoutBtn: {
-        backgroundColor: '#fcfcfc',
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 10,
-        marginRight: 10,
-    },
-    logoutText: {
-        color: '#864AF9',
-        fontWeight: 'bold',
-    },
-    cancelBtn: {
-        backgroundColor: '#fcfcfc',
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 10,
-    },
-    cancelText: {
-        color: '#864AF9',
-        fontWeight: 'bold',
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        marginBottom: 20,
+        borderWidth: 4,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
     },
     inputRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 16,
+        width: '100%',
     },
-
     modalLabel: {
-        width: 90, // fixed label width
+        width: 80,
         fontSize: 14,
-        fontWeight: '600',
-        color: '#fcfcfc',
+        fontWeight: '700',
+        color: 'rgba(255, 255, 255, 0.9)',
     },
-
     inputContainer: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#fff',
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
     },
-
     modalInput: {
         flex: 1,
-        fontSize: 14,
-        color: '#000',
+        fontSize: 15,
+        color: '#2D3748',
+        fontWeight: '500',
+    },
+    editIcon: {
+        marginLeft: 10,
+        padding: 4,
+    },
+    buttonRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 24,
+        width: '100%',
+    },
+    logoutBtn: {
+        backgroundColor: '#FFFFFF',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        marginRight: 10,
+        flex: 1,
+        alignItems: 'center',
+    },
+    logoutText: {
+        color: '#864AF9',
+        fontWeight: '700',
+        fontSize: 16,
+    },
+    cancelBtn: {
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        flex: 1,
+        alignItems: 'center',
+    },
+    cancelText: {
+        color: '#FFFFFF',
+        fontWeight: '700',
+        fontSize: 16,
     },
 
-    editIcon: {
-        marginLeft: 8,
+    error: {
+        color: '#F56565',
+        fontSize: 14,
+        textAlign: 'center',
+        marginTop: 8,
     },
 });
 

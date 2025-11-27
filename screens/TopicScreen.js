@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
 import { useUser } from '../context/UserContext';
+const { width } = Dimensions.get('window');
 
 const TopicScreen = ({ route, navigation }) => {
   const { subjectId, userClass, subject } = route.params; // Get subject from route params
@@ -88,103 +89,128 @@ const TopicScreen = ({ route, navigation }) => {
 
 };
 
-// Define styles here
 const styles = StyleSheet.create({
   topicSelectionContainer: {
     flex: 1,
-    backgroundColor: '#f4f4f4', // Light gray background
+    backgroundColor: '#F8F9FE',
     padding: 16,
   },
-  // topicSelectionTitle: {
-  //   fontSize: 24,
-  //   fontWeight: 'bold',
-  //   color: '#864af9', // Themed color
-  //   marginBottom: 24,
-  //   maxWidth: '95%',
-  //   textAlign: 'center', // Center-align the title
-  //   margin: 'auto',
-  //   fontFamily: 'latto',
-  // },
-  topicList: {
-    paddingBottom: 16,
-  },
-  topicItem: {
-    backgroundColor: '#fcfcfc', // Light green background
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    //borderWidth: 1,
-    // borderColor: '#4caf50', // Green border for a fresh look
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3, // Elevation for Android
 
-    gap: 20,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center', // Center the text
-  },
-  subImg: {
-    width: 40,
-    height: 40,
-    // textAlign: 'center',
-    //margin: 'auto',
-    //marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#864af9',
-    borderRadius: 8,
-    padding: 5,
-  },
-  topicText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    fontFamily: 'latto',
-  },
+  // Header Section
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
+
   topicSelectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#864af9',
-    fontFamily: 'latto',
+    fontWeight: '700',
+    color: '#2D3748',
+    letterSpacing: 0.3,
+    flex: 1,
+    flexShrink: 1,
   },
 
   headerButton: {
-    backgroundColor: '#864af9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    backgroundColor: '#864AF9',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: '#864AF9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   headerButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
+
+  // Topic List
+  topicList: {
+    paddingBottom: 24,
+  },
+
+  topicItem: {
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#864AF9',
+    gap: 16,
+  },
+
+  subImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    padding: 8,
+    backgroundColor: '#F7F3FF',
+    borderWidth: 2,
+    borderColor: 'rgba(134, 74, 249, 0.2)',
+    // tintColor: '#864AF9',
+  },
+
+  topicText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#2D3748',
+    flex: 1,
+    letterSpacing: 0.2,
+  },
+
+  // Bottom Button
   startButton: {
-    backgroundColor: '#864af9',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    backgroundColor: '#864AF9',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    shadowColor: '#864AF9',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
   },
+
   startButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    fontFamily: 'latto',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+
+  // Optional: Add pressed state
+  topicItemPressed: {
+    backgroundColor: '#F7F9FC',
+    transform: [{ scale: 0.98 }],
   },
 });
-
 
 export default TopicScreen;
