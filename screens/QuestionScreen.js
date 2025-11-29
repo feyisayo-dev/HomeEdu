@@ -184,6 +184,7 @@ html, body {
                     ...q,
                     options: q.options ? JSON.parse(q.options) : null,
                 }));
+                console.log('Fetched Questions:', parsedQuestions);
                 setQuestions(parsedQuestions);
             } catch (error) {
                 console.error('Error fetching questions:', error);

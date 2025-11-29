@@ -1,94 +1,79 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Image, TextInput, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { RadioButton } from 'react-native-paper';
+import { 
+  View, 
+  Text, 
+  Image, 
+  TextInput, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Animated,
+  Platform 
+} from 'react-native';
 import Katex from 'react-native-katex';
 
-const renderContentWithMath = (text, textStyle = {}) => {
-    // 1. Use [\s\S] to match newlines inside math blocks safeley
-    const parts = text.split(/(\$\$[\s\S]*?\$\$)/g);
+// 1. CSS for the WebView inside KaTeX (Controls the look of the math specifically)
+const inlineStyle = `
+html, body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 10px;
+  background-color: transparent;
+}
+.katex {
+  font-size: 2.5em;
+  text-align: center;
+  color: #000;
+}
+`;
+
+// 2. Rendering Logic (Native Version)
+const renderContentWithMath = (content, textStyle = {}) => {
+    if (!content) return null;
+
+    // Split by $$ delimiters
+    // logic: captures the delimiters in the split array so we can identify them
+    const parts = content.split(/(\$\$[\s\S]*?\$\$)/g);
 
     return (
-        <View style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center', // Aligns text and math vertically
-        }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
             {parts.map((part, index) => {
+                // If part is Math ($$ wrapper)
                 if (part.startsWith('$$') && part.endsWith('$$')) {
-                    const math = part.slice(2, -2).trim();
+                    const mathExpression = part.slice(2, -2); // Remove $$
                     return (
-                        <View key={`math-${index}`} style={{ width: '100%', marginVertical: 8 }}>
-                            <ErrorSafeMath math={math} />
+                        <View key={`math-${index}`} style={styles.mathContainer}>
+                            <Katex
+                                expression={mathExpression}
+                                style={styles.katex}
+                                inlineStyle={inlineStyle}
+                                displayMode={true} // True = Block mode (essential for matrices/vertical addition)
+                                throwOnError={false}
+                            />
                         </View>
                     );
-                } else {
+                }
+                // If part is Text
+                else if (part.trim()) {
                     return (
-                        <Text key={`text-${index}`} style={textStyle}>
-                            {part}
+                        <Text key={`text-${index}`} style={[styles.label, textStyle]}>
+                            {part.trim()}
                         </Text>
                     );
                 }
+                return null;
             })}
         </View>
     );
 };
-const ErrorSafeMath = ({ math }) => {
-    const [hasError, setHasError] = useState(false);
-    if (hasError) {
-        return <Text style={{ color: '#F56565', fontStyle: 'italic' }}>[Math formula]</Text>;
-    }
-    return (
-        <Katex
-            expression={math}
-            displayMode={false} // <--- FALSE: Keeps it in the sentence line
-            throwOnError={false}
-            // removed fixed height/width here to let CSS handle it
-            style={{}}
-            inlineStyle={inlineStyle}
-            onError={() => setHasError(true)}
-        />
-    );
-};
 
-// 3. Use CSS to make the font big, even in inline mode
-const inlineStyle = `
-html, body {
-  margin: 0;
-  padding: 0;
-  background-color: transparent;
-  display: flex;
-  align-items: center; 
-}
-.katex {
-  font-size: 3em;       /* <--- Controls the size manually */
-  margin: 0 4px;         /* Adds small breathing room around math */
-  padding: 0;
-  line-height: 1.2;
-}
-`;
-// const inlineStyle = `
-// html, body {
-//   display: block;
-//   margin: 0;
-//   padding: 0;
-// }
-// .katex {
-//   vertical-align: middle;
-//   font-size: 20px;
-//   line-height: 1.0;
-// }
+// --- Components ---
 
-// .katex-html{
-//  overflow: visible !important; 
-//  }
-// .katex-display {
-//   margin: 0;
-//    overflow: visible !important; 
-// }
-// `;
-
-// Animated Option Component
 const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmitted }) => {
+    // Animation Values
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const selectedAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
 
@@ -96,24 +81,16 @@ const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmi
         Animated.timing(selectedAnim, {
             toValue: isSelected ? 1 : 0,
             duration: 200,
-            useNativeDriver: false,
+            useNativeDriver: false, // Color interpolation doesn't support native driver
         }).start();
     }, [isSelected]);
 
     const handlePressIn = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.97,
-            useNativeDriver: true,
-        }).start();
+        Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
     };
 
     const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            tension: 50,
-            friction: 5,
-            useNativeDriver: true,
-        }).start();
+        Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 5, useNativeDriver: true }).start();
     };
 
     const backgroundColor = selectedAnim.interpolate({
@@ -126,7 +103,7 @@ const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmi
         outputRange: ['#E2E8F0', '#864AF9'],
     });
 
-    // Override colors if submitted
+    // Logic for result colors
     let finalBackgroundColor = backgroundColor;
     let finalBorderColor = borderColor;
 
@@ -141,12 +118,7 @@ const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmi
     }
 
     return (
-        <Animated.View
-            style={{
-                transform: [{ scale: scaleAnim }],
-                marginBottom: 12,
-            }}
-        >
+        <Animated.View style={{ transform: [{ scale: scaleAnim }], marginBottom: 12 }}>
             <TouchableOpacity
                 onPress={onPress}
                 onPressIn={handlePressIn}
@@ -154,46 +126,38 @@ const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmi
                 activeOpacity={1}
                 disabled={isSubmitted}
             >
-                <Animated.View
-                    style={[
-                        styles.optionContainer,
-                        {
-                            backgroundColor: finalBackgroundColor,
-                            borderColor: finalBorderColor,
-                        },
-                    ]}
-                >
+                <Animated.View style={[
+                    styles.optionContainer, 
+                    { backgroundColor: finalBackgroundColor, borderColor: finalBorderColor }
+                ]}>
+                    
+                    {/* Radio Button Circle */}
                     <View style={styles.radioContainer}>
-                        <View
-                            style={[
-                                styles.radioOuter,
-                                isSelected && styles.radioOuterSelected,
-                                isSubmitted && isCorrect === true && styles.radioOuterCorrect,
-                                isSubmitted && isCorrect === false && isSelected && styles.radioOuterIncorrect,
-                            ]}
-                        >
+                        <View style={[
+                            styles.radioOuter,
+                            isSelected && styles.radioOuterSelected,
+                            isSubmitted && isCorrect === true && styles.radioOuterCorrect,
+                            isSubmitted && isCorrect === false && isSelected && styles.radioOuterIncorrect,
+                        ]}>
                             {isSelected && (
-                                <View
-                                    style={[
-                                        styles.radioInner,
-                                        isSubmitted && isCorrect === true && styles.radioInnerCorrect,
-                                        isSubmitted && isCorrect === false && styles.radioInnerIncorrect,
-                                    ]}
-                                />
+                                <View style={[
+                                    styles.radioInner,
+                                    isSubmitted && isCorrect === true && styles.radioInnerCorrect,
+                                    isSubmitted && isCorrect === false && styles.radioInnerIncorrect,
+                                ]} />
                             )}
                         </View>
                     </View>
 
+                    {/* Option Text / Math */}
                     <View style={styles.optionTextContainer}>
                         {renderContentWithMath(option, styles.optionText)}
                     </View>
 
-                    {isSubmitted && isCorrect === true && (
-                        <Text style={styles.correctIcon}>✓</Text>
-                    )}
-                    {isSubmitted && isCorrect === false && isSelected && (
-                        <Text style={styles.incorrectIcon}>✗</Text>
-                    )}
+                    {/* Icons */}
+                    {isSubmitted && isCorrect === true && <Text style={styles.correctIcon}>✓</Text>}
+                    {isSubmitted && isCorrect === false && isSelected && <Text style={styles.incorrectIcon}>✗</Text>}
+                
                 </Animated.View>
             </TouchableOpacity>
         </Animated.View>
@@ -201,18 +165,8 @@ const AnimatedOption = ({ option, index, isSelected, onPress, isCorrect, isSubmi
 };
 
 const ObjectiveQuestion = ({ question, selectedOption, onSelection, isSubmitted }) => {
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-        }).start();
-    }, []);
-
     return (
-        <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+        <View style={styles.questionContainer}>
             {question.image && (
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: question.image }} style={styles.questionImage} />
@@ -224,41 +178,27 @@ const ObjectiveQuestion = ({ question, selectedOption, onSelection, isSubmitted 
             </View>
 
             <View style={styles.optionsWrapper}>
-                {question.options.map((option, index) => {
-                    const isSelected = selectedOption === option;
-                    const isCorrect = isSubmitted ? option === question.answer : null;
-
-                    return (
-                        <AnimatedOption
-                            key={index}
-                            option={option}
-                            index={index}
-                            isSelected={isSelected}
-                            onPress={() => !isSubmitted && onSelection(option)}
-                            isCorrect={isCorrect}
-                            isSubmitted={isSubmitted}
-                        />
-                    );
-                })}
+                {question.options.map((option, index) => (
+                    <AnimatedOption
+                        key={index}
+                        option={option}
+                        index={index}
+                        isSelected={selectedOption === option}
+                        onPress={() => !isSubmitted && onSelection(option)}
+                        isCorrect={isSubmitted ? option === question.answer : null}
+                        isSubmitted={isSubmitted}
+                    />
+                ))}
             </View>
-        </Animated.View>
+        </View>
     );
 };
 
 const TheoryQuestion = ({ question, onAnswerChange, value, isSubmitted }) => {
-    const fadeAnim = useRef(new Animated.Value(0)).current;
     const [isFocused, setIsFocused] = useState(false);
 
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-        }).start();
-    }, []);
-
     return (
-        <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+        <View style={styles.questionContainer}>
             {question.image && (
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: question.image }} style={styles.questionImage} />
@@ -285,24 +225,15 @@ const TheoryQuestion = ({ question, onAnswerChange, value, isSubmitted }) => {
                 onBlur={() => setIsFocused(false)}
                 editable={!isSubmitted}
             />
-        </Animated.View>
+        </View>
     );
 };
 
 const FillInTheGapsQuestion = ({ question, onAnswerChange, value, isSubmitted }) => {
-    const fadeAnim = useRef(new Animated.Value(0)).current;
     const [isFocused, setIsFocused] = useState(false);
 
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-        }).start();
-    }, []);
-
     return (
-        <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+        <View style={styles.questionContainer}>
             {question.image && (
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: question.image }} style={styles.questionImage} />
@@ -327,21 +258,18 @@ const FillInTheGapsQuestion = ({ question, onAnswerChange, value, isSubmitted })
                 onBlur={() => setIsFocused(false)}
                 editable={!isSubmitted}
             />
-        </Animated.View>
+        </View>
     );
 };
 
+// Main Renderer Switch
 const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer, isSubmitted }) => {
     const handleSelection = (value) => {
-        if (!isSubmitted) {
-            onAnswerSelected(question.QuestionId, value);
-        }
+        if (!isSubmitted) onAnswerSelected(question.QuestionId, value);
     };
 
     const handleAnswerChange = (value) => {
-        if (!isSubmitted) {
-            onAnswerSelected(question.QuestionId, value);
-        }
+        if (!isSubmitted) onAnswerSelected(question.QuestionId, value);
     };
 
     switch (question.type) {
@@ -355,7 +283,6 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer, isSubmit
                     isSubmitted={isSubmitted}
                 />
             );
-
         case 'theory':
             return (
                 <TheoryQuestion
@@ -365,7 +292,6 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer, isSubmit
                     isSubmitted={isSubmitted}
                 />
             );
-
         case 'short_answer':
             return (
                 <FillInTheGapsQuestion
@@ -375,19 +301,41 @@ const QuestionRenderer = ({ question, onAnswerSelected, selectedAnswer, isSubmit
                     isSubmitted={isSubmitted}
                 />
             );
-
         default:
             return (
                 <View style={styles.unsupportedContainer}>
-                    <Text style={styles.unsupportedText}>
-                        Unsupported question type: {question.type}
-                    </Text>
+                    <Text style={styles.unsupportedText}>Unsupported: {question.type}</Text>
                 </View>
             );
     }
 };
 
 const styles = StyleSheet.create({
+    // --- Styles for Math Blocks (From Base Version) ---
+    mathContainer: {
+        minHeight: 120, // Ensures matrix/vertical addition has space
+        width: '100%',
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#eee',
+        overflow: 'hidden',
+        marginTop: 8,
+        marginBottom: 8,
+    },
+    katex: {
+        flex: 1,
+        minHeight: 40,
+    },
+    label: {
+        fontSize: 16,
+        color: '#333',
+        marginBottom: 5,
+        // Ensure text wraps nicely around blocks if needed, 
+        // though flexWrap on parent handles most flow.
+    },
+    
+    // --- Styles from Scaled Version ---
     questionContainer: {
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
@@ -397,6 +345,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.08,
         shadowRadius: 12,
         elevation: 4,
+        marginBottom: 20, // Added spacing for list views
     },
     imageContainer: {
         marginBottom: 20,
@@ -416,15 +365,14 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         color: '#2D3748',
-        // lineHeight: 26,
-        // letterSpacing: 0.2,
+        lineHeight: 24,
     },
     optionsWrapper: {
         marginTop: 8,
     },
     optionContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'center', // Important for aligning radio button with content
         padding: 16,
         borderRadius: 12,
         borderWidth: 2,

@@ -163,6 +163,59 @@ const SubtopicScreen = ({ route, navigation }) => {
     });
   };
 
+  // Updated function signature to include topicId and Subject if they aren't global
+  const handleExplanation = (subtopicId, Subtopic) => {
+
+    // Define the fallback navigation params here to avoid duplication
+    const navigateToQuestion = () => {
+      navigation.navigate('Question', {
+        subtopicId: subtopicId,
+        subtopic: Subtopic,
+        selectedSubjects: Subtopic,
+        type: 'topicExam',
+        subject: Subject, // Ensure this variable exists in your component scope
+        topic: topicId,   // Ensure this variable exists in your component scope
+      });
+    };
+
+    const fetchExplanation = async () => {
+      if (loading) return;
+      setLoading(true);
+
+      try {
+        const response = await axios.get(
+          `https://homeedu.fsdgroup.com.ng/api/explanation/${subtopicId}`
+        );
+
+        // If we get a 200 OK, check if the data structure confirms success
+        if (response.data && response.data.status === 200) {
+          navigation.navigate('Explanation', {
+            subtopicId: subtopicId,
+            Subtopic: Subtopic,
+          });
+        } else {
+          // If status is 200 but backend logic says "no data", go to questions
+          navigateToQuestion();
+        }
+
+      } catch (err) {
+        // 1. Check if it is a 404 error
+        if (err.response && err.response.status === 404) {
+          console.log("404 found: No explanation, redirecting to questions...");
+          navigateToQuestion();
+        }
+        // 2. Handle actual errors (Network down, Server crash 500, etc)
+        else {
+          console.error("Critical Error:", err);
+          setError('An error occurred while fetching the explanation.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchExplanation();
+  };
   if (loading) return <ActivityIndicator size="large" color="#864AF9" style={{ flex: 1, justifyContent: 'center' }} />;
   if (error) return <Text style={styles.errorText}>{error}</Text>;
 
@@ -180,10 +233,7 @@ const SubtopicScreen = ({ route, navigation }) => {
             item={item}
             index={index}
             onPress={() =>
-              navigation.navigate('Explanation', {
-                subtopicId: item.SubtopicId,
-                Subtopic: item.Subtopic,
-              })
+              handleExplanation(item.SubtopicId, item.Subtopic)
             }
           />
         )}

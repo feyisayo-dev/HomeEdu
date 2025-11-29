@@ -827,6 +827,11 @@ const DashboardScreen = ({ route, navigation }) => {
                             onPress={() => navigation.navigate('Subject')}>
                             <Text style={styles.subjectsButtonText}>View All Subjects</Text>
                         </TouchableOpacity>
+                        {/* <TouchableOpacity
+                            style={styles.subjectsButton}
+                            onPress={() => navigation.navigate('Test')}>
+                            <Text style={styles.subjectsButtonText}>Test</Text>
+                        </TouchableOpacity> */}
                     </View>
                 );
             default:
