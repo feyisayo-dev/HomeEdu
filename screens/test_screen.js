@@ -1,121 +1,124 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView } from 'react-native';
-import Katex from 'react-native-katex';
+import { View, StyleSheet, Text, ScrollView, Dimensions } from 'react-native';
+import { WebView } from 'react-native-webview';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const MathBlock = ({ latex, inline = false }) => {
+  // Start with a small default size
+  const [dims, setDims] = useState({ h: 40, w: 50 });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            background: transparent; 
+            display: inline-block; 
+            overflow: hidden;
+            white-space: nowrap;
+          }
+          #m { 
+            display: inline-block;
+            font-size: 16px; 
+            padding: 2px 6px; 
+          }
+        </style>
+      </head>
+      <body>
+        <div id="m"></div>
+        <script>
+          try {
+            var el = document.getElementById('m');
+            var tex = "${latex.replace(/\\/g, '\\\\')}";
+            katex.render(tex, el, { 
+              displayMode: ${!inline}, 
+              throwOnError: false 
+            });
+
+            var counts = 0;
+            var interval = setInterval(function() {
+              // Measure both offsetHeight AND offsetWidth
+              var h = el.offsetHeight;
+              var w = el.offsetWidth;
+              if (h > 0 && w > 0) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ height: h, width: w }));
+              }
+              if (counts++ > 15) clearInterval(interval);
+            }, 150);
+          } catch (e) { window.ReactNativeWebView.postMessage("error"); }
+        </script>
+      </body>
+    </html>
+  `;
+
+  return (
+    <View style={{
+      height: dims.h,
+      width: inline ? dims.w : SCREEN_WIDTH - 40,
+      marginHorizontal: 2,
+      marginBottom: inline ? 0 : 10,
+    }}>
+      <WebView
+        originWhitelist={['*']}
+        source={{ html }}
+        scrollEnabled={false}
+        onMessage={(e) => {
+          try {
+            const data = JSON.parse(e.nativeEvent.data);
+            if (data.height && data.width) {
+              setDims({ h: data.height + 8, w: data.width + 10 });
+            }
+          } catch (err) { }
+        }}
+        style={{ backgroundColor: 'transparent' }}
+        javaScriptEnabled={true}
+      />
+    </View>
+  );
+};
 
 export default function MathTestScreen() {
-  const [loaded, setLoaded] = useState(false);
-
-  // Mixed content strings: We put Text and Math together in one variable.
-  // We use $$ to mark the start and end of the math section so we can separate it later.
-  const mixedVerticalAddition = `Vertical Addition: $$\\begin{array}{r}2313_{x} \\\\ + 1013_{x} \\\\ + 2131_{x} \\\\ \\hline 11012_{x}\\end{array}$$, Yes it works! `;
-  
+  const mixedVerticalAddition = `Vertical Addition: $$\\begin{array}{r}2313_{x} \\\\ + 1013_{x} \\\\ + 2131_{x} \\\\ \\hline 11012_{x}\\end{array}$$, Yes it works!`;
   const mixedQuadratic = `Quadratic Formula: $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$`;
+  const testQuestion = `Add $$1101_2$$, $$10111_2$$ and $$111_2$$`;
 
-  // Helper function to separate Text from Math
   const renderMixedContent = (content) => {
-    // Split the string by the $$ delimiters
     const parts = content.split(/(\$\$[\s\S]*?\$\$)/g);
-
-    return parts.map((part, index) => {
-      // If part starts/ends with $$, it's Math
-      if (part.startsWith('$$') && part.endsWith('$$')) {
-        const mathExpression = part.slice(2, -2); // Remove the $$
-        return (
-          <View key={index} style={styles.mathContainer}>
-            <Katex
-                expression={mathExpression}
-                style={styles.katex}
-                inlineStyle={inlineStyle}
-                displayMode={true}
-                throwOnError={false}
-                onLoad={() => setLoaded(true)}
-            />
-          </View>
-        );
-      } 
-      // Otherwise, it's regular Text
-      else if (part.trim()) {
-        return (
-          <Text key={index} style={styles.label}>
-            {part.trim()}
-          </Text>
-        );
-      }
-      return null;
-    });
+    return (
+      <View style={styles.section}>
+        {parts.map((part, index) => {
+          if (part.startsWith('$$') && part.endsWith('$$')) {
+            return <MathBlock key={index} latex={part.slice(2, -2)} inline={true} />;
+          } else if (part.trim()) {
+            return <Text key={index} style={styles.label}>{part}</Text>;
+          }
+          return null;
+        })}
+      </View>
+    );
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Render the mixed content */}
-      <View style={styles.section}>
-        {renderMixedContent(mixedVerticalAddition)}
-      </View>
-
+      {renderMixedContent(mixedVerticalAddition)}
       <View style={styles.separator} />
-
-      <View style={styles.section}>
-        {renderMixedContent(mixedQuadratic)}
-      </View>
+      {renderMixedContent(mixedQuadratic)}
+      <View style={styles.separator} />
+      {renderMixedContent(testQuestion)}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    padding: 20,
-    paddingTop: 50,
-    paddingBottom: 50,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#eee',
-    marginVertical: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
-  },
-  mathContainer: {
-    // Give the container a minimum height to ensure it's visible
-    minHeight: 120, 
-    width: '100%',
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-    overflow: 'hidden',
-    marginTop: 5,
-  },
-  katex: {
-    flex: 1,
-    minHeight: 120,
-  }
+  container: { flex: 1, backgroundColor: '#fff' },
+  content: { padding: 20, paddingTop: 60 },
+  section: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  label: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  separator: { height: 1, backgroundColor: '#eee', marginVertical: 20 },
 });
-
-const inlineStyle = `
-html, body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 10px;
-  background-color: transparent;
-}
-.katex {
-  font-size: 20px;
-  text-align: center;
-  color: #000;
-}
-`;

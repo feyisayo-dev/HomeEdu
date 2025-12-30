@@ -269,30 +269,36 @@ const ExamScreen = ({ route, navigation }) => {
             return;
         }
         Alert.alert('These are the selected subject(s)', selectedSubjects.join(', '));
+
         if (type === 'classExam') {
-            let SubjectExam = selectedSubjects;
             navigation.navigate('Question', {
                 subtopicId: null,
                 subtopic: null,
-                selectedSubjects,
-                type,
-                subject: SubjectExam,
+                selectedSubjects: selectedSubjects,
+                type: type,
+                subject: selectedSubjects,
                 topic: null,
-                subtopic: null,
             });
-        } else {
+        } else if (type === 'subjectExam') {
             navigation.navigate('Question', {
                 subtopicId: null,
-                subtopic: subtopic,
-                selectedSubjects,
-                type,
+                subtopic: null,
+                selectedSubjects: selectedSubjects,
+                type: type,
+                subject,
+                topic: selectedSubjects,
+            });
+        } else if (type === 'topicExam') {
+            navigation.navigate('Question', {
+                subtopicId: null,
+                subtopic: selectedSubjects,
+                selectedSubjects: selectedSubjects,
+                type: type,
                 subject,
                 topic,
-                subtopic,
             });
         }
     };
-
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -334,7 +340,7 @@ const ExamScreen = ({ route, navigation }) => {
                         break;
 
                     case 'topicExam':
-                        response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/subtopics/${topic}`);
+                        response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topic}`);
                         if (response.data.status === 200) {
                             setSubjects(response.data.data);
                         } else {

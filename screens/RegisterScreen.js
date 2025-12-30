@@ -42,11 +42,11 @@ export default function RegisterScreen({ navigation }) {
     // Fetch classes from the backend when the component mounts
     const fetchClasses = async () => {
       try {
-        const response = await fetch("https://homeedu.fsdgroup.com.ng/api/fetchAllClasses");
+        const response = await fetch("https://homeedu.fsdgroup.com.ng/api/getClassForUser");
         const data = await response.json();
         console.log("This is the data gotten from backend", data)
         if (data.status === 200) {
-          setClasses(data.Classes); // Assuming the classes array is in the "data" property
+          setClasses(data.class); // Assuming the classes array is in the "data" property
         } else {
           console.error("Failed to fetch classes");
         }

@@ -2,15 +2,15 @@
   "expo": {
     "name": "Home Edu",
     "slug": "snack-af3caf87-beb8-4c10-bef6-e6e4059e4023",
-    "version": "1.0.1",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon_upscale.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#864AF9"
     },
     "ios": {
       "supportsTablet": true,
@@ -21,8 +21,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/icon_upscale.png",
+        "backgroundColor": "#864AF9"
       },
       "package": "com.fsdgroup.homeedu"
     },
@@ -34,9 +34,7 @@
         "projectId": "73dafd1b-c779-4fd4-8b71-eeb16892019b"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/73dafd1b-c779-4fd4-8b71-eeb16892019b"
     },

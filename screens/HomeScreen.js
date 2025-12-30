@@ -1,14 +1,56 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ImageBackground,Image } from 'react-native';
+import React, { useEffect, useState, useContext } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ImageBackground, Image, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserContext } from '../context/UserContext';
 
 const HomePage = ({ navigation }) => {
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const { setUserData } = useContext(UserContext);
+
+  useEffect(() => {
+    const checkUserSession = async () => {
+      try {
+        // 1. Check if user data exists in storage
+        const savedUser = await AsyncStorage.getItem('userData');
+        
+        if (savedUser) {
+          // 2. If found, restore to context and go to Dashboard
+          const parsedUser = JSON.parse(savedUser);
+          setUserData(parsedUser);
+          
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Dashboard' }],
+          });
+        } else {
+          // 3. If not found, stop loading and show the page
+          setCheckingAuth(false);
+        }
+      } catch (error) {
+        console.log('Error checking session:', error);
+        setCheckingAuth(false);
+      }
+    };
+
+    checkUserSession();
+  }, []);
+
+  // Show a loading spinner while checking storage
+  if (checkingAuth) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#864AF9" />
+      </View>
+    );
+  }
+
   return (
     <ImageBackground
       source={require('../assets/Rectangle_106.png')}
       style={styles.background}
     >
       <View style={styles.illustration}>
-           <Image source={require('../assets/EduGraphics.png')} style={styles.illustrationimg} />
+        <Image source={require('../assets/EduGraphics.png')} style={styles.illustrationimg} />
       </View>
       <View style={styles.container}>
         <Text style={styles.title}>Welcome to HomeEdu!</Text>
@@ -27,13 +69,19 @@ const HomePage = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fcfcfc',
+  },
   background: {
     flex: 1,
     resizeMode: 'cover',
     justifyContent: 'center',
     backgroundColor: '#fcfcfc'
   },
-  illustration:{
+  illustration: {
     height: '40%',
     width: '100%',
     backgroundColor: '#864AF9'
@@ -41,22 +89,17 @@ const styles = StyleSheet.create({
   illustrationimg: {
     height: 415,
     width: 398,
-    objectFit: 'contain',
-    position: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    resizeMode: 'contain', // Changed objectFit to resizeMode for RN compatibility
+    alignSelf: 'center',   // Replaces alignItems/justifyContent in parent
   },
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-   // backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent overlay
-   backgroundColor: '#fcfcfc',
-   borderTopLeftRadius: '25%',
-   borderTopRightRadius: '0%',
-  // height: 600,
-   //width: 500
+    backgroundColor: '#fcfcfc',
+    borderTopLeftRadius: 25, // Changed '25%' to number for better compatibility
+    borderTopRightRadius: 0,
   },
   title: {
     fontSize: 32,
@@ -71,7 +114,7 @@ const styles = StyleSheet.create({
     color: '#aaaaaa',
     marginBottom: 30,
     textAlign: 'center',
-      fontFamily: 'latto',
+    fontFamily: 'latto',
   },
   button: {
     backgroundColor: '#864AF9',
@@ -84,7 +127,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fcfcfc',
     fontSize: 18,
-    fontWeight: 'bold', //oluwafeyisayofummi@gmail.com   1oladejoA@#
+    fontWeight: 'bold', 
     fontFamily: 'latto',
   },
 });

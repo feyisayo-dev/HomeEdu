@@ -126,11 +126,11 @@ const DashboardScreen = ({ route, navigation }) => {
     }, [userData.class]);
     const fetchClasses = async () => {
         try {
-            const response = await fetch("https://homeedu.fsdgroup.com.ng/api/fetchAllClasses");
+            const response = await fetch("https://homeedu.fsdgroup.com.ng/api/getClassForUser");
             const data = await response.json();
             console.log("This is the data gotten from backend", data)
             if (data.status === 200) {
-                setAvailableClasses(data.Classes);
+                setAvailableClasses(data.class);
             } else {
                 console.error("Failed to fetch classes");
             }
@@ -822,16 +822,19 @@ const DashboardScreen = ({ route, navigation }) => {
                         <Text style={styles.subjectsDescription}>
                             Dive into your courses and learn at your pace!
                         </Text>
+
                         <TouchableOpacity
                             style={styles.subjectsButton}
                             onPress={() => navigation.navigate('Subject')}>
                             <Text style={styles.subjectsButtonText}>View All Subjects</Text>
                         </TouchableOpacity>
-                        {/* <TouchableOpacity
-                            style={styles.subjectsButton}
-                            onPress={() => navigation.navigate('Test')}>
-                            <Text style={styles.subjectsButtonText}>Test</Text>
-                        </TouchableOpacity> */}
+
+                        {/* Added marginTop here 👇 */}
+                        <TouchableOpacity
+                            style={[styles.subjectsButton, { marginTop: 16 }]}
+                            onPress={() => navigation.navigate('Novel')}>
+                            <Text style={styles.subjectsButtonText}>Read your Novels</Text>
+                        </TouchableOpacity>
                     </View>
                 );
             default:

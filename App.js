@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useEffect } from 'react'; // Added useEffect
+import { View, ActivityIndicator, Alert } from 'react-native'; // Added Alert
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import * as Updates from 'expo-updates'; // Added this import
 
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
@@ -17,18 +18,47 @@ import ExplanationScreen from './screens/ExplanationScreen';
 import ExampleScreen from './screens/ExampleScreen';
 import ExamScreen from './screens/ExamScreen';
 import MathTestScreen from './screens/test_screen';
+import NovelScreen from './screens/NovelScreen';
+import PassageScreen from './screens/PassageScreen';
 import { useFonts } from 'expo-font';
 import 'react-native-gesture-handler';
 
 const Stack = createStackNavigator();
 
 export default function App() {
+  // --- 1. EAS UPDATE LOGIC ---
+  useEffect(() => {
+    async function onFetchUpdateAsync() {
+      if (__DEV__) return; // Don't check for updates during local development
+
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          Alert.alert(
+            "Update Available",
+            "A new version of the quiz is ready. Restarting to apply changes...",
+            [{ text: "OK", onPress: async () => await Updates.reloadAsync() }]
+          );
+        }
+      } catch (error) {
+        console.log("Error fetching updates:", error);
+      }
+    }
+    onFetchUpdateAsync();
+  }, []);
+
+  // --- 2. FONT LOADING ---
   const [fontsLoaded] = useFonts({
     'milkyCustom': require('./assets/fonts/milkyCustom.ttf'),
   });
 
   if (!fontsLoaded) {
-    return <ActivityIndicator size="large" style={{ marginTop: 100 }} />;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#864AF9" />
+      </View>
+    );
   }
 
   return (
@@ -48,6 +78,8 @@ export default function App() {
               <Stack.Screen name="Subtopic" component={SubtopicScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Question" component={QuestionScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Test" component={MathTestScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Novel" component={NovelScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Passage" component={PassageScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Exam" component={ExamScreen} options={{ headerShown: false }} />
             </Stack.Navigator>
           </NavigationContainer>

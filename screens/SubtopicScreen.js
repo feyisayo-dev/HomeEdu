@@ -137,7 +137,8 @@ const SubtopicScreen = ({ route, navigation }) => {
   useEffect(() => {
     const fetchSubtopics = async () => {
       try {
-        const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/subtopics/${topicId}`);
+        const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topicId}`);
+        console.log("This is the response", response.data);
         if (response.data.status === 200) {
           setSubtopics(response.data.data);
         } else {
@@ -172,9 +173,9 @@ const SubtopicScreen = ({ route, navigation }) => {
         subtopicId: subtopicId,
         subtopic: Subtopic,
         selectedSubjects: Subtopic,
-        type: 'topicExam',
+        type: 'subtopicExam',
         subject: Subject, // Ensure this variable exists in your component scope
-        topic: topicId,   // Ensure this variable exists in your component scope
+        topic: Topic,   // Ensure this variable exists in your component scope
       });
     };
 
