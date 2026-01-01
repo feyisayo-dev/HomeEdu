@@ -93,31 +93,75 @@ const SmartMath = ({ latex, inline = true }) => {
         </View>
     );
 };
-
-// --- 2. CONTENT RENDERER (Splits text and math) ---
+// --- 2. CONTENT RENDERER (Splits text, math, bold, underline, and color) ---
 const renderContentWithMath = (content, textStyle = {}) => {
     if (!content) return null;
+
+    // Step 1: Split by LaTeX Math ($$ ... $$)
     const parts = content.split(/(\$\$[\s\S]*?\$\$)/g);
 
     return (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
             {parts.map((part, index) => {
+                // CASE A: Handle Math
                 if (part.startsWith('$$') && part.endsWith('$$')) {
                     const latex = part.slice(2, -2);
                     return <SmartMath key={`math-${index}`} latex={latex} inline={true} />;
-                } else if (part.trim()) {
-                    return (
-                        <Text key={`text-${index}`} style={[styles.label, textStyle]}>
-                            {part}
-                        </Text>
-                    );
+                }
+
+                // CASE B: Handle Text with Styles
+                if (part) {
+                    // Split by Bold (**), Underline (__), or Color ({hex}...)
+                    // Regex adds support for __underline__
+                    const fragments = part.split(/(\*\*.*?\*\*|__.*?__|\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*?\{\/\})/g);
+
+                    return fragments.map((sub, subIndex) => {
+                        const key = `text-${index}-${subIndex}`;
+
+                        // 1. Handle Bold (**text**)
+                        if (sub.startsWith('**') && sub.endsWith('**')) {
+                            return (
+                                <Text key={key} style={[styles.label, textStyle, { fontWeight: 'bold' }]}>
+                                    {sub.slice(2, -2)}
+                                </Text>
+                            );
+                        }
+
+                        // 2. Handle Underline (__text__) -> NEW ADDITION
+                        if (sub.startsWith('__') && sub.endsWith('__')) {
+                            return (
+                                <Text key={key} style={[styles.label, textStyle, { textDecorationLine: 'underline' }]}>
+                                    {sub.slice(2, -2)}
+                                </Text>
+                            );
+                        }
+
+                        // 3. Handle Color ({#hex}text{/})
+                        if (sub.match(/^\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}.*\{\/\}$/)) {
+                            const colorMatch = sub.match(/^\{(#[0-9a-fA-F]{3,6}|[a-z]+)\}(.*)\{\/\}$/);
+                            return (
+                                <Text key={key} style={[styles.label, textStyle, { color: colorMatch[1] }]}>
+                                    {colorMatch[2]}
+                                </Text>
+                            );
+                        }
+
+                        // 4. Render Plain Text
+                        // Filter out undefined captures from regex
+                        if (!sub || sub === 'undefined') return null;
+
+                        return (
+                            <Text key={key} style={[styles.label, textStyle]}>
+                                {sub}
+                            </Text>
+                        );
+                    });
                 }
                 return null;
             })}
         </View>
     );
 };
-
 // --- 3. SUB-COMPONENTS ---
 
 const AnimatedOption = ({ option, isSelected, onPress, isCorrect, isSubmitted }) => {

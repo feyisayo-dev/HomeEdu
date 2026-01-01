@@ -16,7 +16,7 @@ const TopicScreen = ({ route, navigation }) => {
       console.log("This is subject", subject);
       console.log("This is userClass", userClass);
       try {
-        const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/topics/${subject}`, {
+        const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/userTopics/${subject}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
