@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Home Edu",
-    "slug": "snack-af3caf87-beb8-4c10-bef6-e6e4059e4023",
+    "slug": "home-edu",
     "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,23 +24,24 @@
         "foregroundImage": "./assets/icon_upscale.png",
         "backgroundColor": "#864AF9"
       },
-      "package": "com.fsdgroup.homeedu"
+      "package": "com.fsdgroup.homeedu",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/icon_favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "73dafd1b-c779-4fd4-8b71-eeb16892019b"
-      }
-    },
     "runtimeVersion": "1.0.0",
-    "updates": {
-      "url": "https://u.expo.dev/73dafd1b-c779-4fd4-8b71-eeb16892019b"
-    },
     "plugins": [
       "expo-video",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "47aa7f08-c771-4292-945f-214e401cf76f"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/47aa7f08-c771-4292-945f-214e401cf76f"
+    }
   }
 }

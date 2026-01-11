@@ -215,7 +215,7 @@ const ExamScreen = ({ route, navigation }) => {
     const [Exam, setExam] = useState('');
     const { userData } = useUser();
     const [selectedSubjects, setSelectedSubjects] = useState([]);
-    const { type, subject, topic, subtopic, userClass } = route.params;
+    const { type, subject, topic, topicId, subtopic, userClass } = route.params;
 
     const toggleSubject = (subject) => {
         const isSelected = selectedSubjects.includes(subject);
@@ -340,7 +340,7 @@ const ExamScreen = ({ route, navigation }) => {
                         break;
 
                     case 'topicExam':
-                        response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topic}`);
+                        response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topicId}`);
                         if (response.data.status === 200) {
                             setSubjects(response.data.data);
                         } else {

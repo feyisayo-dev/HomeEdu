@@ -158,7 +158,8 @@ const SubtopicScreen = ({ route, navigation }) => {
     navigation.navigate('Exam', {
       type: 'topicExam',
       subject: Subject,
-      topic: topicId,
+      topic: Topic,
+      topicId: topicId,
       subtopic: null,
       userClass: userData.class,
     });
