@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react'; // Added useEffect
-import { View, ActivityIndicator, Alert } from 'react-native'; // Added Alert
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, Alert, LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import * as Updates from 'expo-updates'; // Added this import
+import * as Updates from 'expo-updates';
 
+// --- IMPORTS ---
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -20,24 +21,29 @@ import ExamScreen from './screens/ExamScreen';
 import MathTestScreen from './screens/test_screen';
 import NovelScreen from './screens/NovelScreen';
 import PassageScreen from './screens/PassageScreen';
+// Import your ErrorBoundary component
+import ErrorBoundary from './screens/errors/indexScreen'; 
+
 import { useFonts } from 'expo-font';
 import 'react-native-gesture-handler';
 
 const Stack = createStackNavigator();
 
+// OPTIONAL: Ignore harmless warnings that clutter the screen
+LogBox.ignoreLogs(['new NativeEventEmitter']); 
+
 export default function App() {
   // --- 1. EAS UPDATE LOGIC ---
   useEffect(() => {
     async function onFetchUpdateAsync() {
-      if (__DEV__) return; // Don't check for updates during local development
-
+      if (__DEV__) return;
       try {
         const update = await Updates.checkForUpdateAsync();
         if (update.isAvailable) {
           await Updates.fetchUpdateAsync();
           Alert.alert(
             "Update Available",
-            "A new version of the quiz is ready. Restarting to apply changes...",
+            "A new version is ready. Restarting...",
             [{ text: "OK", onPress: async () => await Updates.reloadAsync() }]
           );
         }
@@ -61,30 +67,34 @@ export default function App() {
     );
   }
 
+  // --- 3. RENDER (FIXED) ---
+  // Notice ErrorBoundary wraps EVERYTHING here
   return (
-    <SafeAreaProvider>
-      <UserProvider>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#fcfcfc' }}>
-          <NavigationContainer>
-            <Stack.Navigator initialRouteName="Home">
-              <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Subject" component={SubjectScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Topic" component={TopicScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Explanation" component={ExplanationScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Example" component={ExampleScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Subtopic" component={SubtopicScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Question" component={QuestionScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Test" component={MathTestScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Novel" component={NovelScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Passage" component={PassageScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Exam" component={ExamScreen} options={{ headerShown: false }} />
-            </Stack.Navigator>
-          </NavigationContainer>
-        </SafeAreaView>
-      </UserProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary> 
+      <SafeAreaProvider>
+        <UserProvider>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#fcfcfc' }}>
+            <NavigationContainer>
+              <Stack.Navigator initialRouteName="Home">
+                <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Subject" component={SubjectScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Topic" component={TopicScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Subtopic" component={SubtopicScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Explanation" component={ExplanationScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Example" component={ExampleScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Question" component={QuestionScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Test" component={MathTestScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Novel" component={NovelScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Passage" component={PassageScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Exam" component={ExamScreen} options={{ headerShown: false }} />               
+              </Stack.Navigator>
+            </NavigationContainer>
+          </SafeAreaView>
+        </UserProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
