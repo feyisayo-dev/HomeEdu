@@ -165,7 +165,6 @@ const SubtopicScreen = ({ route, navigation }) => {
     });
   };
 
-  // Updated function signature to include topicId and Subject if they aren't global
   const handleExplanation = (subtopicId, Subtopic) => {
 
     // Define the fallback navigation params here to avoid duplication
@@ -194,6 +193,8 @@ const SubtopicScreen = ({ route, navigation }) => {
           navigation.navigate('Explanation', {
             subtopicId: subtopicId,
             Subtopic: Subtopic,
+            subject: Subject, // Ensure this variable exists in your component scope
+            topic: Topic,   // Ensure this variable exists in your component scope
           });
         } else {
           // If status is 200 but backend logic says "no data", go to questions

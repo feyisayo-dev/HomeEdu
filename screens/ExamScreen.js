@@ -269,7 +269,13 @@ const ExamScreen = ({ route, navigation }) => {
             return;
         }
         Alert.alert('These are the selected subject(s)', selectedSubjects.join(', '));
-
+        let examId = null;
+      const prefix = selectedSubjects[0].slice(0, 3).toUpperCase();
+        const randomCode = Math.random()
+        .toString(36)
+        .substring(2, 6)
+        .toUpperCase();
+        examId = `${prefix}${randomCode}`;
         if (type === 'classExam') {
             navigation.navigate('Question', {
                 subtopicId: null,
@@ -278,6 +284,7 @@ const ExamScreen = ({ route, navigation }) => {
                 type: type,
                 subject: selectedSubjects,
                 topic: null,
+                examId: examId,
             });
         } else if (type === 'subjectExam') {
             navigation.navigate('Question', {
@@ -287,6 +294,7 @@ const ExamScreen = ({ route, navigation }) => {
                 type: type,
                 subject,
                 topic: selectedSubjects,
+                examId: examId,
             });
         } else if (type === 'topicExam') {
             navigation.navigate('Question', {
@@ -296,6 +304,7 @@ const ExamScreen = ({ route, navigation }) => {
                 type: type,
                 subject,
                 topic,
+                examId: examId,
             });
         }
     };

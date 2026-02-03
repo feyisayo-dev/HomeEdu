@@ -1,211 +1,344 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback } from "react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useRef, useContext } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
-  Button,
   Text,
   RefreshControl,
-  Modal,
   TouchableOpacity,
-  FlatList,
   StyleSheet,
   Image,
   ScrollView,
   Dimensions,
   ActivityIndicator,
+  TextInput,
+  Platform,
+  Alert,
+  Modal,
+  FlatList
 } from "react-native";
-const { width } = Dimensions.get("window");
 import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
-import { TextInput } from "react-native";
 import { useUser } from "../context/UserContext";
 import * as ImagePicker from "expo-image-picker";
-import { Platform } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system";
-import { Alert } from "react-native";
-import * as Constants from "expo-constants";
-const DashboardScreen = ({ route, navigation }) => {
+import * as FileSystem from "expo-file-system/legacy";
+import { TutorialProvider, TutorialStep, useTutorial } from '../context/TutorialSysytem';
+import { BackgroundMusicContext } from '../context/BackgroundMusicProvider';
+import * as NotificationService from '../context/NotificationService'; // Update path as needed
+import { requestWidgetUpdate } from 'react-native-android-widget';
+import { StatsWidget } from '../src/widgets/StatsWidget';
+import DateTimePicker from '@react-native-community/datetimepicker';
+
+const { width } = Dimensions.get("window");
+
+const InputField = ({ label, value, onChange, isEditing, onToggle, keyboardType = 'default' }) => (
+  <View style={styles.inputGroup}>
+    <Text style={styles.modalLabel}>{label}</Text>
+    <View style={[styles.inputContainer, isEditing && styles.inputContainerActive]}>
+      <TextInput
+        style={styles.modalInput}
+        value={value}
+        onChangeText={onChange}
+        editable={isEditing}
+        keyboardType={keyboardType}
+      />
+      <TouchableOpacity style={styles.editIcon} onPress={onToggle}>
+        <Ionicons
+          name={isEditing ? "checkmark" : "pencil"}
+          size={18}
+          color="#000"
+        />
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+
+const DashboardContent = ({ route, navigation }) => {
+  const { start, canStart, stop, isActive, scrollViewRef } = useTutorial();
+  const { isMuted, toggleMute } = useContext(BackgroundMusicContext);
+  const tutorialHasStarted = useRef(false);
   const { userData, setUserData } = useUser();
 
-  // FIX 1: Add optional chaining (?.) and fallbacks (|| "")
+  const [activeScreenTab, setActiveScreenTab] = useState("dashboard");
+  const [musicPacks, setMusicPacks] = useState([]);
+  const [loadingPackages, setLoadingPackages] = useState(false);
+  const [downloadingPackId, setDownloadingPackId] = useState(null);
+  const [downloadStatus, setDownloadStatus] = useState("");
+  const [downloadedPacks, setDownloadedPacks] = useState([]);
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const [streaks, setStreaks] = useState(0);
   const [reports, setReports] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("recent");
-  const [modalVisible, setModalVisible] = useState(false);
+  const [subjects, setSubjects] = useState([]);
+  const [availableClasses, setAvailableClasses] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false);
-
-  // Safety check applied here:
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState("recent");
+  // Edit States
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempFullName, setTempFullName] = useState(userData?.fullName || "");
-
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [tempUsername, setTempUsername] = useState(userData?.username || "");
-
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [tempEmail, setTempEmail] = useState(userData?.email || "");
-
   const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [tempPhone, setTempPhone] = useState(userData?.phoneNumber || "");
-
-  const [availableClasses, setAvailableClasses] = useState([]);
-  const [tempClass, setTempClass] = useState(userData?.class || "");
-
   const [isEditingClass, setIsEditingClass] = useState(false);
-  const [isEditingAvatar, setIsEditingAvatar] = useState(false);
-  const [tempAvatar, setTempAvatar] = useState(userData?.avatar || "");
+  const [tempClass, setTempClass] = useState(userData?.class || "");
+  const [timetableData, setTimetableData] = useState([]);
+  const [isEditingTimetable, setIsEditingTimetable] = useState(false);
+  const [tempTimetable, setTempTimetable] = useState([]);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [activeTimeIndex, setActiveTimeIndex] = useState(-1);
+  const [activeTimeType, setActiveTimeType] = useState('start'); // 'start' or 'end'
+  const [pickerDate, setPickerDate] = useState(new Date());
+  // --- DELETE MODAL STATE ---
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [packToDelete, setPackToDelete] = useState(null); // Stores the pack object
+  const [partialStatus, setPartialStatus] = useState({});
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [appMode, setAppMode] = useState("free");
-  const [subjects, setSubjects] = useState([]);
+  // Helper: Open picker for specific side (Start or End)
+  const openTimePicker = (index, fullTimeString, type) => {
+    setActiveTimeIndex(index);
+    setActiveTimeType(type);
+
+    // fullTimeString looks like "10:00 AM - 11:00 AM"
+    // We split it by the " - " separator
+    const parts = fullTimeString.split(' - ');
+    const timeToParse = type === 'start' ? parts[0] : (parts[1] || parts[0]);
+
+    // Parse the time string into a Date object for the picker
+    let date = new Date();
+    const timeParts = timeToParse ? timeToParse.match(/(\d+):(\d+)\s*(AM|PM)/i) : null;
+
+    if (timeParts) {
+      let hours = parseInt(timeParts[1]);
+      const minutes = parseInt(timeParts[2]);
+      const ampm = timeParts[3].toUpperCase();
+
+      if (ampm === "PM" && hours < 12) hours += 12;
+      if (ampm === "AM" && hours === 12) hours = 0;
+
+      date.setHours(hours);
+      date.setMinutes(minutes);
+    } else {
+      // Default fallback if string is messy
+      date.setMinutes(0);
+      if (type === 'start') date.setHours(9);
+      else date.setHours(10);
+    }
+
+    setPickerDate(date);
+    setShowTimePicker(true);
+  };
+
+  // Helper: Handle the scroll/selection
+  const onTimeChange = (event, selectedDate) => {
+    if (event.type === 'dismissed') {
+      setShowTimePicker(false);
+      return;
+    }
+
+    const currentDate = selectedDate || pickerDate;
+
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+
+    if (activeTimeIndex > -1) {
+      // 1. Format the new time
+      let hours = currentDate.getHours();
+      const minutes = currentDate.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+      const newTimeString = `${hours}:${minutesStr} ${ampm}`;
+
+      // 2. Get the OLD range string and split it
+      const currentRange = tempTimetable[activeTimeIndex].time; // "9:00 AM - 10:00 AM"
+      const parts = currentRange.includes(' - ') ? currentRange.split(' - ') : [currentRange, "??"];
+
+      // 3. Reconstruct the range
+      let finalRange = "";
+      if (activeTimeType === 'start') {
+        finalRange = `${newTimeString} - ${parts[1] || '10:00 AM'}`;
+      } else {
+        finalRange = `${parts[0] || '9:00 AM'} - ${newTimeString}`;
+      }
+
+      // 4. Update State
+      const newData = [...tempTimetable];
+      newData[activeTimeIndex].time = finalRange;
+      setTempTimetable(newData);
+    }
+  };
+  // --- TEMPORARY DEBUG FUNCTIONS ---
+  // const testNotification = async () => {
+  //     console.log("🔔 Testing Notification...");
+
+  //     // Call the new helper we just added
+  //     await NotificationService.sendImmediateTest();
+
+  //     // No need for Alert.alert, the notification itself is the alert
+  //   };
+
+  //   const testWidget = async () => {
+  //     console.log("📱 Force Updating Widget...");
+  //     // Force update with dummy high numbers
+  //     await updateHomeWidget(50, 999); 
+  //     Alert.alert("Widget Updated", "Check your home screen widget. It should show 50 Streak & 999 Stars.");
+  //   };
+
+  const updateHomeWidget = async (streakCount, starCount) => {
+    try {
+      await requestWidgetUpdate({
+        widgetName: 'StatsWidget',
+        renderWidget: () => <StatsWidget streaks={streakCount} stars={starCount} />,
+        widgetInfo: {
+          minWidth: 320,
+          minHeight: 100,
+          targetCellWidth: 4,
+          targetCellHeight: 1,
+        }
+      });
+      console.log("📱 Widget Updated");
+    } catch (error) {
+      console.log("Widget Error (Ignore if in Expo Go):", error);
+    }
+  };
+
+  // --- NOTIFICATIONS & WIDGET SETUP ---
+  useEffect(() => {
+    const setupServices = async () => {
+      if (!userData) return;
+
+      // 1. Register
+      const hasPermission = await NotificationService.registerForPushNotifications();
+
+      if (hasPermission) {
+        // 2. Schedule Dynamic Streak (Using REAL data)
+        await NotificationService.scheduleDynamicStreak(streaks, userData.stars || 0);
+
+        // 3. Schedule Timetable (1 Hour Before First Class)
+        // Logic: Get today's schedule based on Weekend/Weekday
+        const currentDay = new Date().getDay();
+        const isWeekend = currentDay === 0 || currentDay === 6;
+
+        // Define first slot time based on your rules
+        const firstSlotTime = isWeekend ? "10:00 AM" : "3:30 PM";
+
+        // Pick the first subject from your state (if available)
+        const firstSubject = subjects.length > 0 ? subjects[0].Subject : "General Revision";
+
+        await NotificationService.scheduleTimetableAlert(firstSubject, firstSlotTime);
+      }
+
+      // 4. UPDATE WIDGET (See Part 3 below)
+      await updateHomeWidget(streaks, userData.stars);
+    };
+
+    setupServices();
+  }, [userData, streaks, subjects]); // Re-run if streaks or subjects change
+
+  // Tutorial startup logic
+  useEffect(() => {
+    const runTutorial = async () => {
+      if (tutorialHasStarted.current) return;
+      // const removeTutorial = await AsyncStorage.removeItem('hasSeenDashboardTutorial');
+
+      try {
+        const hasSeenTutorial = await AsyncStorage.getItem('hasSeenDashboardTutorial');
+
+        if (hasSeenTutorial !== 'true' && canStart && userData) {
+          tutorialHasStarted.current = true;
+          setTimeout(() => {
+            start();
+          }, 1000);
+        }
+      } catch (error) {
+        console.log('❌ Tutorial setup error:', error);
+      }
+    };
+
+    runTutorial();
+  }, [canStart, userData, start]);
+
+  // Save tutorial completion
+  useEffect(() => {
+    const handleTutorialComplete = async () => {
+      if (!isActive && tutorialHasStarted.current) {
+        await AsyncStorage.setItem('hasSeenDashboardTutorial', 'true');
+        tutorialHasStarted.current = false;
+      }
+    };
+
+    handleTutorialComplete();
+  }, [isActive]);
+
+  // Initial user data check
   useEffect(() => {
     if (!userData) {
-      console.log(
-        "⚠️ userData is missing in context, trying to restore from params..."
-      );
       const data = route.params?.userData;
       if (data) {
         setUserData(data);
       } else {
-        // If we really have no data anywhere, force back to login
         navigation.replace("Login");
       }
     }
-  }, [userData, setUserData, route.params]);
+  }, [userData, setUserData, route.params, navigation]);
 
-  // 3️⃣ NOW ADD THE GUARD CLAUSE
-  // This protects the UI below from crashing while Step 2 is running
-
-  const checkMode = async () => {
-    try {
-      console.log("🚀 Starting mode check...");
-      console.log("📋 Constants object:", Constants);
-
-      // Multiple fallback methods to get version
-      const version =
-        Constants.expoConfig?.version ||
-        Constants.manifest?.version ||
-        Constants.manifest2?.extra?.expoClient?.version ||
-        "1.0.0";
-
-      console.log("📱 App version:", version);
-
-      const response = await axios.post(
-        "https://homeedu.fsdgroup.com.ng/api/mode",
-        { app: version }
-      );
-      console.log("✅ API Response:", response.data);
-
-      setAppMode(response.data.mode);
-      console.log("🎯 App mode set to:", response.data.mode);
-    } catch (error) {
-      console.error("❌ Error checking mode:", error.message);
-      console.error("❌ Full error:", error);
-      setAppMode("free"); // fallback
-    }
-  };
-
+  // Cache verification
   useEffect(() => {
-    checkMode();
-  }, []);
-  const fetchSubjects = async () => {
-    try {
-      console.log("This is class", userData?.class);
-
-      const response = await axios.post(
-        "https://homeedu.fsdgroup.com.ng/api/subjects",
-        { class: userData?.class }
-      );
-
-      if (response.data.status === 200) {
-        setSubjects(response.data.data);
-        console.log("Fetched subjects response:", response.data);
-      } else {
-        // Handle unexpected success response structure
-        setSubjects([]);
-        setError("No subjects found.");
+    const verifyCache = async () => {
+      if (userData?.localAvatar) {
+        const info = await FileSystem.getInfoAsync(userData.localAvatar);
+        if (!info.exists) {
+          const newLocal = await cacheImage(userData.avatar, userData.username);
+          const fixedUser = { ...userData, localAvatar: newLocal };
+          setUserData(fixedUser);
+          AsyncStorage.setItem("userData", JSON.stringify(fixedUser));
+        }
+      } else if (userData?.avatar && !userData?.localAvatar) {
+        const newLocal = await cacheImage(userData.avatar, userData.username);
+        const fixedUser = { ...userData, localAvatar: newLocal };
+        setUserData(fixedUser);
+        AsyncStorage.setItem("userData", JSON.stringify(fixedUser));
       }
-    } catch (err) {
-      // Handle 404 or any other HTTP error
-      if (err.response?.status === 404) {
-        setSubjects([]); // Set to empty if not found
-      } else {
-        setError("An error occurred while fetching subjects.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  useEffect(() => {
-    fetchSubjects();
-  }, [userData?.class]);
-  const fetchClasses = async () => {
-    try {
-      const response = await fetch(
-        "https://homeedu.fsdgroup.com.ng/api/getClassForUser"
-      );
-      const data = await response.json();
-      console.log("This is the data gotten from backend", data);
-      if (data.status === 200) {
-        setAvailableClasses(data.class);
-      } else {
-        console.error("Failed to fetch classes");
-      }
-    } catch (error) {
-      console.error("Error fetching classes:", error);
-    }
-  };
+    if (userData) verifyCache();
+  }, [userData]);
 
   useEffect(() => {
     fetchClasses();
   }, []);
-  const truncateText = (text, max = 18) => {
-    if (!text) return null;
-    return text.length > max ? text.substring(0, max) + "..." : text;
-  };
-
-  const fetchReports = async () => {
-    try {
-      const response = await axios.get(
-        `https://homeedu.fsdgroup.com.ng/api/report/${userData?.username}`
-      );
-
-      if (response.data.status === 200) {
-        // Map through the data and round Score to 2 decimal places
-        const roundedReports = response.data.data.map((report) => ({
-          ...report,
-          Score: Number(parseFloat(report.Score).toFixed(2)),
-          subtopic_name: truncateText(report.subtopic_name),
-          exam_name: truncateText(report.exam_name),
-        }));
-
-        setReports(roundedReports);
-
-        console.log("This is the report data", roundedReports);
-      } else {
-        setReports([]);
-        setError("No reports found.");
-      }
-    } catch (err) {
-      if (err.response?.status === 404) {
-        setReports([]); // Clear reports if not found
-      } else {
-        setError("An error occurred while fetching reports.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    fetchReports();
+    if (activeScreenTab === "packages" && musicPacks.length === 0) {
+      fetchMusicPackages();
+    }
+  }, [activeScreenTab, musicPacks.length]);
+
+  useEffect(() => {
+    if (userData?.class) {
+      fetchSubjects();
+      fetchLeaderboard();
+    }
+  }, [userData?.class]);
+
+  useEffect(() => {
+    if (userData?.username) {
+      fetchReports();
+    }
   }, [userData?.username]);
 
   useFocusEffect(
@@ -222,331 +355,456 @@ const DashboardScreen = ({ route, navigation }) => {
           console.error("Error fetching streaks:", error);
         }
       };
-
       fetchStreaks();
     }, [userData])
   );
 
-  const fetchLeaderboard = async () => {
-    try {
-      console.log("Fetching leaderboard...");
-      const formData = new FormData();
-      formData.append("class", userData?.class);
+  // ========== INSERT YOUR FETCH FUNCTIONS HERE ==========
+  // fetchMusicPackages, checkExistingDownloads, downloadPack
+  // fetchClasses, fetchSubjects, fetchReports, fetchLeaderboard
+  // =====================================================
+  const checkExistingDownloads = async (packs) => {
+    const loadedIds = [];
+    const partials = {};
 
-      const response = await fetch(
-        "https://homeedu.fsdgroup.com.ng/api/getleaderboard",
-        {
-          method: "POST",
-          body: formData,
+    for (const pack of packs) {
+      const packFolder = `${FileSystem.documentDirectory}music_packs/${pack.id}/`;
+      const dirInfo = await FileSystem.getInfoAsync(packFolder);
+
+      if (!dirInfo.exists) {
+        continue; // Folder doesn't exist, skip
+      }
+
+      let foundCount = 0;
+      const totalFiles = pack.files.length;
+
+      // Check each file specifically
+      for (const file of pack.files) {
+        const safeName = getSafeFileName(file.name);
+        const fileUri = packFolder + safeName;
+        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+
+        if (fileInfo.exists) {
+          foundCount++;
         }
-      );
+      }
 
-      const json = await response.json();
-      console.log("Fetched leaderboard response:", json);
-
-      if (json.status === 200) {
-        setLeaderboard(json.data);
-      } else if (json.status === 404) {
-        setLeaderboard([]); // Empty leaderboard if not found
+      // Logic: Is it Done, Partial, or Empty?
+      if (foundCount === totalFiles) {
+        loadedIds.push(pack.id);
+      } else if (foundCount > 0) {
+        partials[pack.id] = `${foundCount}/${totalFiles}`;
       } else {
-        setError("Failed to load leaderboard.");
+        // Folder exists but is empty (0 files), clean it up
+        await FileSystem.deleteAsync(packFolder, { idempotent: true });
+      }
+    }
+
+    setDownloadedPacks(loadedIds);
+    setPartialStatus(partials);
+  };
+
+  const fetchMusicPackages = async () => {
+    setLoadingPackages(true);
+    try {
+      const response = await fetch(`https://fsdgroup.com.ng/Edu/music/music.json?t=${new Date().getTime()}`);
+      const json = await response.json();
+      if (json.packs) {
+        setMusicPacks(json.packs);
+        checkExistingDownloads(json.packs);
       }
     } catch (error) {
-      setError("An error occurred while fetching leaderboard.");
+      console.error("Error fetching music:", error);
+    } finally {
+      setLoadingPackages(false);
+    }
+  };
+
+  const downloadPack = async (pack) => {
+    if (downloadingPackId) return;
+
+    setDownloadingPackId(pack.id);
+    setDownloadStatus("Checking...");
+
+    try {
+      const packFolder = `${FileSystem.documentDirectory}music_packs/${pack.id}/`;
+      const dirInfo = await FileSystem.getInfoAsync(packFolder);
+
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(packFolder, { intermediates: true });
+      }
+
+      let count = 0;
+      const total = pack.files.length;
+
+      // 1. Count what we already have (Resuming)
+      for (const file of pack.files) {
+        const safeName = getSafeFileName(file.name);
+        const finalUri = packFolder + safeName;
+        const fileInfo = await FileSystem.getInfoAsync(finalUri);
+        if (fileInfo.exists) count++;
+      }
+
+      // 2. Download loop
+      for (const file of pack.files) {
+        const safeName = getSafeFileName(file.name);
+        const finalUri = packFolder + safeName;   // real_song.mp3
+        const tempUri = finalUri + ".tmp";        // real_song.mp3.tmp
+
+        // Update UI
+        setDownloadStatus(`${count}/${total}`);
+
+        // Check if we already have the FINAL file
+        const fileInfo = await FileSystem.getInfoAsync(finalUri);
+
+        if (!fileInfo.exists) {
+          // A. Download to TEMP file first
+          // This overwrites any old corrupt .tmp file automatically
+          const downloadRes = await FileSystem.downloadAsync(file.url, tempUri);
+
+          if (downloadRes.status !== 200) {
+            // Server error? Delete the temp file so we don't leave trash
+            await FileSystem.deleteAsync(tempUri, { idempotent: true });
+            throw new Error(`Failed to download ${file.name}`);
+          }
+
+          // B. Success! Rename .tmp -> .mp3 (This is instant/atomic)
+          await FileSystem.moveAsync({
+            from: tempUri,
+            to: finalUri
+          });
+
+          count++;
+        }
+      }
+
+      setDownloadStatus("Done!");
+      Alert.alert("Success!", "Pack downloaded complete.");
+
+      setDownloadedPacks((prev) => [...prev, pack.id]);
+      setPartialStatus((prev) => {
+        const next = { ...prev };
+        delete next[pack.id];
+        return next;
+      });
+
+    } catch (error) {
+      console.log("Download Interrupted:", error);
+      Alert.alert("Download Paused", "Internet connection lost. Tap 'Resume' to continue.");
+
+      // Update the button to show "Resume (3/5)"
+      checkExistingDownloads([pack]);
+
+    } finally {
+      setDownloadingPackId(null);
+      setDownloadStatus("");
+    }
+  };
+
+  const getSafeFileName = (name) => {
+    return name.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".mp3";
+  };
+
+  // 1. OPEN MODAL (Triggered by the Trash Button)
+  const promptDelete = (pack) => {
+    setPackToDelete(pack);
+    setDeleteModalVisible(true);
+  };
+
+  // 2. EXECUTE DELETE (Triggered by "Yes" in Modal)
+  const performDelete = async () => {
+    if (!packToDelete) return;
+
+    try {
+      // A. Delete Folder
+      const packFolder = `${FileSystem.documentDirectory}music_packs/${packToDelete.id}/`;
+      await FileSystem.deleteAsync(packFolder, { idempotent: true });
+
+      // B. Update UI Instantly
+      setDownloadedPacks((prev) => prev.filter((id) => id !== packToDelete.id));
+
+      // C. Close Modal
+      setDeleteModalVisible(false);
+      setPackToDelete(null);
+
+    } catch (e) {
+      console.error(e);
+      // Optional: Show a "toast" or error state here if needed
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const response = await fetch(
+        "https://homeedu.fsdgroup.com.ng/api/getClassForUser"
+      );
+      const data = await response.json();
+      if (data.status === 200) {
+        setAvailableClasses(data.class);
+      }
+    } catch (error) {
+      console.error("Error fetching classes:", error);
+    }
+  };
+
+  const fetchSubjects = async () => {
+    try {
+      const response = await axios.post(
+        "https://homeedu.fsdgroup.com.ng/api/subjects",
+        { class: userData?.class }
+      );
+      if (response.data.status === 200) {
+        setSubjects(response.data.data);
+      } else {
+        setSubjects([]);
+        setError("No subjects found.");
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setSubjects([]);
+      } else {
+        setError("An error occurred while fetching subjects.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchLeaderboard();
-  }, [userData?.class]);
+  const fetchReports = async () => {
+    try {
+      // Clear previous errors before trying
+      setError(null);
+
+      const response = await axios.get(
+        `https://homeedu.fsdgroup.com.ng/api/report/${userData?.username}`
+      );
+
+      if (response.data.status === 200) {
+        const roundedReports = response.data.data.map((report) => ({
+          ...report,
+          Score: Number(parseFloat(report.Score).toFixed(2)),
+          subtopic_name: truncateText(report.subtopic_name),
+          exam_name: truncateText(report.exam_name),
+        }));
+        setReports(roundedReports);
+      } else {
+        setReports([]);
+        setError("No reports found.");
+      }
+    } catch (err) {
+      // ✅ LOGIC: If there is no response, it's a Network Error
+      if (!err.response) {
+        setError("No Internet Connection ⚠️");
+      } else if (err.response?.status === 404) {
+        setReports([]);
+      } else {
+        setError("Unable to load reports.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLeaderboard = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("class", userData?.class);
+
+      const response = await fetch(
+        `https://homeedu.fsdgroup.com.ng/api/getleaderboard/${userData?.username}`,
+        { method: "POST", body: formData }
+      );
+
+      const json = await response.json();
+      if (json.status === 200) {
+        setLeaderboard(json.data);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (error) {
+      console.error(error);
+      // ✅ If fetch fails, we assume network issues since we can't reach the server
+      // You can set a specific state here if you want, e.g., setLeaderboardError(true)
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  const truncateText = (text, max = 18) => {
+    if (!text) return null;
+    return text.length > max ? text.substring(0, max) + "..." : text;
+  };
 
   const generateClassTimes = () => {
-    const currentDay = new Date().getDay(); // 0 = Sunday, 6 = Saturday
+    const currentDay = new Date().getDay();
     const isWeekend = currentDay === 0 || currentDay === 6;
-
     if (isWeekend) {
-      // Weekend timings
       return ["10:00 AM - 11:00 AM", "2:00 PM - 3:00 PM", "7:00 PM - 8:00 PM"];
     } else {
-      // Weekday timings
       return ["3:30 PM - 4:30 PM", "6:00 PM - 7:00 PM", "8:00 PM - 9:00 PM"];
     }
   };
 
   const toggleEditName = async () => {
     if (isEditingName) {
-      // Save name
       try {
         const formData = new FormData();
         formData.append("fullname", tempFullName);
         formData.append("username", userData?.username);
-
         const response = await fetch(
           "https://homeedu.fsdgroup.com.ng/api/editname",
-          {
-            method: "POST",
-            body: formData,
-          }
+          { method: "POST", body: formData }
         );
-
         if (response.status === 200) {
-          setUserData({ ...userData, fullName: tempFullName });
+          const updatedUser = { ...userData, fullName: tempFullName };
+          setUserData(updatedUser);
+          await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
           setIsEditingName(false);
-          alert("Name updated successfully!");
+          Alert.alert("Success", "Name updated successfully!");
         } else {
-          alert("Failed to update name");
+          Alert.alert("Error", "Failed to update name");
         }
       } catch (err) {
         console.error(err);
-        alert("Error saving name");
+        Alert.alert("Error", "Error saving name");
       }
     } else {
-      // Enter edit mode
       setIsEditingName(true);
     }
   };
+
+  // ========== INSERT YOUR OTHER SAVE FUNCTIONS HERE ==========
+  // saveUsername, saveEmail, savePhone, saveClass
+  // ===========================================================
+
   const saveUsername = async () => {
     const formData = new FormData();
     formData.append("old_username", userData?.username);
     formData.append("new_username", tempUsername);
-
     try {
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editusername",
-        {
-          method: "POST",
-          body: formData,
-        }
+        { method: "POST", body: formData }
       );
-
-      const data = await response.json(); // Parse JSON response
-
+      const data = await response.json();
       if (response.ok && data.status === 200) {
-        // Username updated successfully
-        setUserData({ ...userData, username: tempUsername });
+        const updatedUser = { ...userData, username: tempUsername };
+        setUserData(updatedUser);
+        await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
         setIsEditingUsername(false);
-        alert("Username updated successfully!");
+        Alert.alert("Success", "Username updated successfully!");
       } else if (data.status === 101) {
-        // Username already exists
-        alert("Username already taken. Please choose a different one.");
+        Alert.alert("Error", "Username already taken.");
       } else {
-        alert("Failed to update username: " + (data.message || ""));
+        Alert.alert("Error", "Failed: " + (data.message || ""));
       }
     } catch (error) {
-      console.error(error);
-      alert("Network error or issue updating username.");
+      Alert.alert("Error", "Network error.");
     }
   };
 
   const saveEmail = async () => {
     const formData = new FormData();
-    formData.append("username", userData?.username); // or any unique ID
+    formData.append("username", userData?.username);
     formData.append("email", tempEmail);
-
     try {
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editemail",
-        {
-          method: "POST",
-          body: formData,
-        }
+        { method: "POST", body: formData }
       );
-
       if (response.ok) {
-        setUserData({ ...userData, email: tempEmail });
+        const updatedUser = { ...userData, email: tempEmail };
+        setUserData(updatedUser);
+        await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
         setIsEditingEmail(false);
-        alert("Email updated successfully!");
+        Alert.alert("Success", "Email updated successfully!");
       } else if (response.status === 101) {
-        alert(
-          "Email already in use by another user. Please choose a different one."
-        );
+        Alert.alert("Error", "Email already in use.");
       } else {
-        alert("Failed to update email");
+        Alert.alert("Error", "Failed to update email");
       }
     } catch (error) {
-      console.error(error);
-      alert("Error updating email");
+      Alert.alert("Error", "Error updating email");
     }
   };
 
   const savePhone = async () => {
     const formData = new FormData();
-    formData.append("username", userData?.username); // or your unique ID
+    formData.append("username", userData?.username);
     formData.append("phone", tempPhone);
-
     try {
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editphone",
-        {
-          method: "POST",
-          body: formData,
-        }
+        { method: "POST", body: formData }
       );
-
       if (response.ok) {
-        setUserData({ ...userData, phoneNumber: tempPhone });
+        const updatedUser = { ...userData, phoneNumber: tempPhone };
+        setUserData(updatedUser);
+        await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
         setIsEditingPhone(false);
-        alert("Phone number updated successfully!");
+        Alert.alert("Success", "Phone number updated successfully!");
       } else {
-        alert("Failed to update phone number");
+        Alert.alert("Error", "Failed to update phone number");
       }
     } catch (error) {
-      console.error(error);
-      alert("Error updating phone number");
+      Alert.alert("Error", "Error updating phone number");
     }
   };
+
   const saveClass = async () => {
     const formData = new FormData();
-    formData.append("username", userData?.username); // assuming username identifies the user
+    formData.append("username", userData?.username);
     formData.append("class", tempClass);
-
     try {
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editclass",
-        {
-          method: "POST",
-          body: formData,
-        }
+        { method: "POST", body: formData }
       );
-
       if (response.ok) {
-        setUserData({ ...userData, class: tempClass });
+        const updatedUser = { ...userData, class: tempClass };
+        setUserData(updatedUser);
+        await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
         setIsEditingClass(false);
-        alert("Class updated successfully!");
+        Alert.alert("Success", "Class updated successfully!");
       } else {
-        alert("Failed to update class");
+        Alert.alert("Error", "Failed to update class");
       }
     } catch (error) {
-      console.error(error);
-      alert("Error updating class");
+      Alert.alert("Error", "Error updating class");
     }
   };
 
   const pickImage = async () => {
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (permissionResult.granted === false) {
-      alert("Permission to access gallery is required!");
-      return;
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permissionResult.granted === false) {
+        Alert.alert("Permission Required", "Permission to access gallery is required!");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "Images",
+        allowsEditing: true,
+        quality: 1,
+      });
+      if (!result.canceled) {
+        uploadProfileImage(result.assets[0]);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Could not open gallery.");
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
-
-    if (!result.cancelled) {
-      uploadProfileImage(result.assets[0]); // for Expo SDK 48+
-    }
-  };
-
-  const compressImage = async (imageUri) => {
-    const result = await ImageManipulator.manipulateAsync(imageUri, [], {
-      compress: 0.5, // adjust compression here
-      format: ImageManipulator.SaveFormat.JPEG,
-    });
-    return result;
   };
 
   const uploadProfileImage = async (image) => {
     if (!userData?.username || !image || !image.uri) {
-      console.error("Validation failed:", {
-        username: userData?.username,
-        image,
-      });
-      alert("Missing username or image data. Please try again.");
+      Alert.alert("Error", "Missing username or image data.");
       return;
     }
-
-    let fileSize = image.size;
-    if (!fileSize) {
-      const fileInfo = await FileSystem.getInfoAsync(image.uri);
-      fileSize = fileInfo.size;
-    }
-    console.log("File size:", fileSize);
+    setIsUploadingImage(true);
+    setUploadProgress(0);
+    const cleanUri = Platform.OS === "ios" ? image.uri.replace("file://", "") : image.uri;
     const fileName = image.uri.split("/").pop();
-
-    let fileType = "image/jpeg"; // default
-
-    if (fileName.endsWith(".png")) fileType = "image/png";
-    else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"))
-      fileType = "image/jpeg";
-    else if (fileName.endsWith(".gif")) fileType = "image/gif";
-    else if (fileName.endsWith(".webp")) fileType = "image/webp";
-
-    const allowedTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-    if (!allowedTypes.includes(fileType)) {
-      alert(
-        "Unsupported image type: " +
-          fileType +
-          "\nSupported types: " +
-          allowedTypes.join(", ")
-      );
-      return;
-    } else {
-      console.log("Image type is supported:", fileType);
-    }
-
-    // ✅ File size check
-    if (fileSize > 1 * 1024 * 1024) {
-      Alert.alert(
-        "Image too large",
-        "The selected image is over 1MB. Do you want to compress it?",
-        [
-          {
-            text: "Choose another",
-            onPress: () => console.log("User canceled"),
-            style: "cancel",
-          },
-          {
-            text: "Compress & Continue",
-            onPress: async () => {
-              try {
-                const compressed = await ImageManipulator.manipulateAsync(
-                  image.uri,
-                  [],
-                  {
-                    compress: 0.5,
-                    format: ImageManipulator.SaveFormat.JPEG,
-                  }
-                );
-
-                const compressedInfo = await FileSystem.getInfoAsync(
-                  compressed.uri
-                );
-
-                if (compressedInfo.size > 20 * 1024 * 1024) {
-                  // Laravel max
-                  Alert.alert(
-                    "Still too large",
-                    "Compressed image is still over 20MB. Please choose another image."
-                  );
-                  return;
-                }
-
-                uploadProfileImage({
-                  ...image,
-                  uri: compressed.uri,
-                  size: compressedInfo.size,
-                });
-              } catch (err) {
-                console.error("Compression failed:", err);
-                Alert.alert("Error", "Could not compress the image.");
-              }
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    const cleanUri =
-      Platform.OS === "ios" ? image.uri.replace("file://", "") : image.uri;
-
+    const fileType = fileName.endsWith(".png") ? "image/png" : "image/jpeg";
     const formData = new FormData();
     formData.append("username", userData?.username);
     formData.append("profile_image", {
@@ -554,123 +812,114 @@ const DashboardScreen = ({ route, navigation }) => {
       name: fileName,
       type: fileType,
     });
-
-    // Debug log
-    console.log("Uploading image:", {
-      uri: cleanUri,
-      name: fileName,
-      type: fileType,
-      size: fileSize,
-    });
-
-    try {
-      const response = await fetch(
-        "https://homeedu.fsdgroup.com.ng/api/EditProfileImage",
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-          },
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-      if (response.ok && data.status === 200) {
-        const baseUrl = "https://homeedu.fsdgroup.com.ng/storage/";
-        alert("Profile image updated!");
-        setUserData((prev) => ({
-          ...prev,
-          avatar: baseUrl + data.profile_image,
-        }));
-        console.log("Updated userData: avatar:" + baseUrl + data.profile_image);
-      } else {
-        console.log(data);
-        alert("Failed to update image: " + (data.message || ""));
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "https://homeedu.fsdgroup.com.ng/api/EditProfileImage");
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        let percent = Math.round((event.loaded / event.total) * 100);
+        if (percent > 100) percent = 100;
+        setUploadProgress(percent);
       }
+    };
+    xhr.onload = async () => {
+      try {
+        const responseData = JSON.parse(xhr.responseText);
+        if (xhr.status === 200 && responseData.status === 200) {
+          const baseUrl = "https://homeedu.fsdgroup.com.ng/storage/";
+          const remoteUrl = baseUrl + responseData.profile_image;
+          const localUri = await cacheImage(remoteUrl, userData?.username);
+          const updatedUser = {
+            ...userData,
+            avatar: remoteUrl,
+            localAvatar: localUri
+          };
+          setUserData(updatedUser);
+          await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
+          Alert.alert("Success", "Profile Image Updated!");
+        } else {
+          Alert.alert("Error", "Upload Failed: " + (responseData.message || "Server Error"));
+        }
+      } catch (e) {
+        Alert.alert("Error", "Server returned an invalid response.");
+      } finally {
+        setIsUploadingImage(false);
+        setUploadProgress(0);
+      }
+    };
+    xhr.onerror = (e) => {
+      Alert.alert("Error", "Network Error: Could not upload image.");
+      setIsUploadingImage(false);
+      setUploadProgress(0);
+    };
+    xhr.send(formData);
+  };
+
+  const cacheImage = async (remoteUri, username) => {
+    if (!remoteUri) return null;
+    try {
+      const fileName = remoteUri.split('/').pop().split('?')[0];
+      const localPath = `${FileSystem.documentDirectory}${username}_${fileName}`;
+      const fileInfo = await FileSystem.getInfoAsync(localPath);
+      if (fileInfo.exists) {
+        return localPath;
+      }
+      const downloadRes = await FileSystem.downloadAsync(remoteUri, localPath);
+      return downloadRes.uri;
     } catch (error) {
-      console.error(error);
-      alert("Network or upload error");
+      return remoteUri;
     }
   };
 
   const fetchRefreshedUser = async () => {
     try {
-      console.log("fetching leaderboard...");
-      fetchLeaderboard();
-      console.log("fetching report...");
-      fetchReports();
-      console.log("fetching subject...");
-      fetchSubjects();
-      console.log("Checking mode....");
-      checkMode();
       setRefreshing(true);
-      const response = await fetch(
-        "https://homeedu.fsdgroup.com.ng/api/refresh",
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ username: userData?.username }),
-        }
-      );
-
+      fetchLeaderboard();
+      fetchReports();
+      fetchSubjects();
+      const response = await fetch("https://homeedu.fsdgroup.com.ng/api/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: userData?.username }),
+      });
       const result = await response.json();
-
       if (response.ok && result.status === 200) {
-        const newAvatar = `${
-          result.user.userData?.avatar
-        }?t=${new Date().getTime()}`;
-
-        setUserData((prev) => ({
-          ...prev,
+        const remoteUrl = result.user.userData?.avatar;
+        const localUri = await cacheImage(remoteUrl, userData?.username);
+        const updatedUser = {
+          ...userData,
           ...result.user.userData,
-          avatar: newAvatar,
-        }));
-        console.log("User refreshed:", result.user.userData);
-      } else {
-        console.log(result);
-        Alert.alert("Error", result.message || "Refresh failed");
+          avatar: remoteUrl,
+          localAvatar: localUri,
+        };
+        setUserData(updatedUser);
+        await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
       }
     } catch (error) {
-      console.error("Refresh error:", error);
-      Alert.alert("Error", "Network issue during refresh");
+      console.error("Refresh Error:", error);
     } finally {
       setRefreshing(false);
     }
   };
 
   const handleLogout = async () => {
-    console.log("🔴 Logout button pressed!"); // 1. Check if press is detected
-
     try {
-      console.log("...Removing userData from storage");
       await AsyncStorage.removeItem("userData");
-
-      console.log("...Setting context to null");
       setUserData(null);
-
-      console.log("...Resetting navigation");
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Login" }],
-      });
+      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
     } catch (error) {
-      console.error("❌ Logout error:", error);
-      alert("Error logging out. Please try again.");
+      Alert.alert("Error", "Error logging out.");
     }
   };
 
-  const sections = [
-    { type: "info" },
-    { type: "streaks" },
-    { type: "reports" },
-    { type: "timetable" },
-    { type: "leaderboard" },
-    { type: "subjects" },
-  ];
+  const sections = useMemo(() => [
+    { type: "info", id: 1, text: "This is your profile section. Tap here to view and edit your details!", name: "Profile" },
+    { type: "streaks", id: 2, text: "Keep your learning streak alive! Practice daily to grow this number.", name: "Streaks" },
+    { type: "reports", id: 3, text: "Track your progress here. See how well you performed in recent exams.", name: "Reports" },
+    { type: "timetable", id: 4, text: "Check your daily schedule here so you never miss a class.", name: "Timetable" },
+    { type: "leaderboard", id: 5, text: "See where you stand! Compete with classmates for the top spot.", name: "Leaderboard" },
+    { type: "subjects", id: 6, text: "Ready to start learning? Tap here to pick a subject and take a quiz.", name: "Subjects" },
+  ], []);
 
   if (!userData) {
     return (
@@ -679,25 +928,92 @@ const DashboardScreen = ({ route, navigation }) => {
       </View>
     );
   }
+  useEffect(() => {
+    const loadTimetable = async () => {
+      try {
+        // Try to get saved custom timetable first
+        const saved = await AsyncStorage.getItem('customTimetable');
+        const classTimes = generateClassTimes();
 
-  const renderItem = ({ item }) => {
+        if (saved) {
+          setTimetableData(JSON.parse(saved));
+        } else if (subjects && subjects.length > 0) {
+          // Fallback: Use API subjects if no custom save exists
+          const defaultData = subjects.slice(0, 3).map((sub, index) => ({
+            time: classTimes[index] || "00:00",
+            subject: sub.Subject
+          }));
+          setTimetableData(defaultData);
+        } else {
+          // Fallback: Empty slots if nothing exists
+          const emptyData = classTimes.map(time => ({ time, subject: "Free Period" }));
+          setTimetableData(emptyData);
+        }
+      } catch (e) {
+        console.error("Error loading timetable", e);
+      }
+    };
+
+    loadTimetable();
+  }, [subjects]);
+  const openTimetableEditor = () => {
+    setTempTimetable(JSON.parse(JSON.stringify(timetableData))); // Deep copy
+    setIsEditingTimetable(true);
+  };
+
+  // 3. Update Text in Temp State
+  const handleTimetableChange = (text, index) => {
+    const newData = [...tempTimetable];
+    newData[index].subject = text;
+    setTempTimetable(newData);
+  };
+
+  // 4. Save to Storage
+  const saveTimetable = async () => {
+    try {
+      setTimetableData(tempTimetable);
+      await AsyncStorage.setItem('customTimetable', JSON.stringify(tempTimetable));
+      setIsEditingTimetable(false);
+      Alert.alert("Success", "Timetable updated!");
+    } catch (e) {
+      Alert.alert("Error", "Could not save timetable.");
+    }
+  };
+
+  // 5. Reset to Default (API)
+  const resetTimetable = async () => {
+    try {
+      await AsyncStorage.removeItem('customTimetable');
+      const classTimes = generateClassTimes();
+      const defaultData = subjects.slice(0, 3).map((sub, index) => ({
+        time: classTimes[index],
+        subject: sub.Subject
+      }));
+      setTimetableData(defaultData);
+      setIsEditingTimetable(false);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const renderSectionContent = (item) => {
     switch (item.type) {
       case "info":
         return (
-          <TouchableOpacity onPress={() => setShowProfileModal(true)}>
-            <View style={styles.infoContainer}>
-              <View style={styles.leftInfo}>
-                <Text style={styles.hello}> Hello </Text>
-                <Text style={styles.infoUsername}> {userData?.username}</Text>
-              </View>
-
-              <Image
-                source={{ uri: userData?.avatar }}
-                style={styles.infoAvatar}
-              />
+          <TouchableOpacity
+            style={styles.infoContainer}
+            onPress={() => setShowProfileModal(true)}
+          >
+            <View style={styles.leftInfo}>
+              <Text style={styles.hello}> Hello </Text>
+              <Text style={styles.infoUsername}> {userData?.username}</Text>
             </View>
+            <Image
+              source={{ uri: userData?.localAvatar || userData?.avatar }}
+              style={styles.infoAvatar}
+            />
           </TouchableOpacity>
         );
+
       case "streaks":
         return (
           <View style={styles.streaksContainer}>
@@ -705,144 +1021,199 @@ const DashboardScreen = ({ route, navigation }) => {
             <Text style={styles.streaksCount}>{streaks} 📚</Text>
           </View>
         );
+
       case "reports":
         return (
           <View style={styles.reportsContainer}>
             <Text style={styles.title}>Reports</Text>
             {loading ? (
-              <Text>Loading...</Text>
+              <ActivityIndicator size="small" color="#864AF9" />
             ) : error ? (
-              <Text style={styles.noTimetableData}>{error}</Text>
+              // ✅ DISPLAY THE CUSTOM NETWORK MESSAGE HERE
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ fontSize: 30 }}>📶</Text>
+                <Text style={{ color: 'red', fontWeight: 'bold', textAlign: 'center', marginTop: 10 }}>
+                  {error}
+                </Text>
+                <TouchableOpacity onPress={fetchReports} style={{ marginTop: 10, padding: 8, backgroundColor: '#eee', borderRadius: 8 }}>
+                  <Text>Tap to Retry</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <>
-                <FlatList
-                  data={reports.slice(0, 2)} // Show only the first 5 reports
-                  keyExtractor={(item, index) => index.toString()}
-                  renderItem={({ item }) => (
-                    <View style={styles.reportItem}>
-                      <Text style={styles.reportTitle}>
-                        {item.exam_name || item.subtopic_name || "Exam"}
-                      </Text>
-                      <Text style={styles.reportScore}>
-                        Score: {item.Score}%
-                      </Text>
-                    </View>
-                  )}
-                  style={styles.reportList}
-                  showsVerticalScrollIndicator={false}
-                />
-                <TouchableOpacity
-                  style={styles.seeMoreButton}
-                  onPress={() => setModalVisible(true)} // Open the modal
-                >
-                  <Text style={styles.seeMoreButtonText}>See More</Text>
-                </TouchableOpacity>
+                {/* Reports List */}
+                {reports.slice(0, 2).map((report, index) => (
+                  <View key={index} style={styles.reportItem}>
+                    <Text style={styles.reportTitle}>
+                      {report.exam_name || report.subtopic_name || "Exam"}
+                    </Text>
+                    <Text style={styles.reportScore}>Score: {report.Score}%</Text>
+                  </View>
+                ))}
+
+                {reports.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.seeMoreButton}
+                    onPress={() => setModalVisible(true)}
+                  >
+                    <Text style={styles.seeMoreButtonText}>See More</Text>
+                  </TouchableOpacity>
+                )}
+
+                {reports.length === 0 && !error && (
+                  <Text style={styles.noTimetableData}>No reports yet.</Text>
+                )}
               </>
             )}
+          </View>
+        );
+      case "timetable":
+        return (
+          <View style={styles.timetableContainer}>
+            {/* Header Row */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.timetableTitle}>Today's Timetable</Text>
+              <TouchableOpacity onPress={openTimetableEditor} style={styles.editIconBtn}>
+                <Ionicons name="pencil" size={20} color="#000" />
+              </TouchableOpacity>
+            </View>
+
+            {/* List */}
+            {loading ? (
+              <ActivityIndicator size="small" color="#864AF9" style={{ marginVertical: 20 }} />
+            ) : timetableData.length > 0 ? (
+              timetableData.map((item, index) => (
+                <View key={index} style={styles.timetableItem}>
+                  {/* Left Accent Strip */}
+                  <View style={styles.timeStrip}>
+                    <Text style={styles.subjectTime}>{item.time.split(' ')[0]}</Text>
+                    <Text style={styles.subjectAmPm}>{item.time.split(' ')[1]}</Text>
+                  </View>
+                  <View style={styles.subjectContent}>
+                    <Text style={styles.subjectName}>{item.subject}</Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.noTimetableData}>No schedule available</Text>
+            )}
+
+            {/* --- Edit Timetable Modal --- */}
             <Modal
-              visible={modalVisible}
+              visible={isEditingTimetable}
               transparent={true}
-              animationType="slide"
-              onRequestClose={() => setModalVisible(false)}
+              animationType="fade"
+              onRequestClose={() => setIsEditingTimetable(false)}
             >
-              <View style={styles.modalContainer}>
-                <View
-                  style={[styles.modalContent, { backgroundColor: "white" }]}
-                >
-                  {/* Tab Navigation */}
-                  <View style={styles.tabContainer}>
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Edit Schedule ✏️</Text>
+                  <Text style={{ color: '#666', marginBottom: 15, fontSize: 12 }}>
+                    Tap the time box to scroll to a time.
+                  </Text>
+
+                  <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                    {tempTimetable.map((item, index) => {
+                      // Safety split for display
+                      const parts = item.time.includes(' - ')
+                        ? item.time.split(' - ')
+                        : [item.time, "12:00 PM"];
+
+                      return (
+                        <View key={index} style={styles.editorRow}>
+                          <Text style={styles.rowLabel}>Period {index + 1}</Text>
+
+                          {/* ⏱️ TIME RANGE ROW */}
+                          <View style={styles.timeRangeContainer}>
+                            {/* Start Time Button */}
+                            <TouchableOpacity
+                              style={styles.timeBox}
+                              onPress={() => openTimePicker(index, item.time, 'start')}
+                            >
+                              <Text style={styles.timeLabel}>FROM</Text>
+                              <Text style={styles.timeValue}>{parts[0]}</Text>
+                            </TouchableOpacity>
+
+                            <Ionicons name="arrow-forward" size={16} color="#bbb" />
+
+                            {/* End Time Button */}
+                            <TouchableOpacity
+                              style={styles.timeBox}
+                              onPress={() => openTimePicker(index, item.time, 'end')}
+                            >
+                              <Text style={styles.timeLabel}>TO</Text>
+                              <Text style={styles.timeValue}>{parts[1]}</Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          {/* 📚 SUBJECT PICKER */}
+                          <View style={styles.pickerWrapper}>
+                            <Picker
+                              selectedValue={item.subject}
+                              onValueChange={(itemValue) => handleTimetableChange(itemValue, index)}
+                              style={styles.picker}
+                              dropdownIconColor="#000"
+                            >
+                              <Picker.Item label="Free Period" value="Free Period" color="#999" />
+                              {subjects.map((sub, subIndex) => (
+                                <Picker.Item
+                                  key={subIndex}
+                                  label={sub.Subject}
+                                  value={sub.Subject}
+                                  color="#000"
+                                />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* 🕒 THE ACTUAL PICKER COMPONENT */}
+                  {showTimePicker && (
+                    <DateTimePicker
+                      testID="dateTimePicker"
+                      value={pickerDate}
+                      mode="time"
+                      is24Hour={false}
+                      display="spinner"
+                      onChange={onTimeChange}
+                    />
+                  )}
+                  {/* Note: display="spinner" forces the wheel roll effect */}
+
+                  {/* iOS needs a manual Close button for the spinner if it's not in a modal */}
+                  {Platform.OS === 'ios' && showTimePicker && (
                     <TouchableOpacity
-                      style={[
-                        styles.tab,
-                        activeTab === "recent" && styles.activeTab,
-                      ]}
-                      onPress={() => setActiveTab("recent")}
+                      style={styles.closePickerBtn}
+                      onPress={() => setShowTimePicker(false)}
                     >
-                      <Text
-                        style={[
-                          styles.tabText,
-                          activeTab === "recent" && styles.activeTabText,
-                        ]}
-                        numberOfLines={1} // Ensure single line
-                        ellipsizeMode="tail" // Truncate text with ellipses
-                      >
-                        Recently Practiced
-                      </Text>
+                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>Done</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.resetBtn]}
+                      onPress={resetTimetable}
+                    >
+                      <Text style={styles.resetBtnText}>RESET</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[
-                        styles.tab,
-                        activeTab === "best" && styles.activeTab,
-                      ]}
-                      onPress={() => setActiveTab("best")}
+                      style={[styles.actionBtn, styles.saveBtn]}
+                      onPress={saveTimetable}
                     >
-                      <Text
-                        style={[
-                          styles.tabText,
-                          activeTab === "best" && styles.activeTabText,
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        Best Scores
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.tab,
-                        activeTab === "worst" && styles.activeTab,
-                      ]}
-                      onPress={() => setActiveTab("worst")}
-                    >
-                      <Text
-                        style={[
-                          styles.tabText,
-                          activeTab === "worst" && styles.activeTabText,
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        Worst Scores
-                      </Text>
+                      <Text style={styles.saveBtnText}>SAVE</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {/* Tab Content */}
-                  <FlatList
-                    data={
-                      activeTab === "recent"
-                        ? reports.slice(0, 20) // Show the most recent 20 reports
-                        : activeTab === "best"
-                        ? [...reports]
-                            .sort((a, b) => b.Score - a.Score)
-                            .slice(0, 20) // Top 20 scores
-                        : [...reports]
-                            .sort((a, b) => a.Score - b.Score)
-                            .slice(0, 20) // Bottom 20 scores
-                    }
-                    keyExtractor={(item, index) => index.toString()}
-                    renderItem={({ item }) => (
-                      <View style={styles.modalReportItem}>
-                        <Text style={styles.modalReportTitle}>
-                          {item.exam_name || item.subtopic_name || "Exam"}
-                        </Text>
-                        <Text style={styles.modalReportScore}>
-                          Score: {item.Score}%
-                        </Text>
-                      </View>
-                    )}
-                    style={styles.modalReportList}
-                    showsVerticalScrollIndicator={false}
-                  />
-
-                  {/* Close Button */}
                   <TouchableOpacity
-                    style={styles.modalCloseButton}
-                    onPress={() => setModalVisible(false)} // Close the modal
+                    style={styles.closeModalBtn}
+                    onPress={() => setIsEditingTimetable(false)}
                   >
-                    <Text style={styles.modalCloseButtonText}>Close</Text>
+                    <Text style={styles.closeModalText}>Close</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -850,58 +1221,22 @@ const DashboardScreen = ({ route, navigation }) => {
           </View>
         );
 
-      case "timetable":
-        const classTimes = generateClassTimes(); // Get the times based on the day
 
-        return (
-          <View style={styles.timetableContainer}>
-            <Text style={styles.timetableTitle}>Today's Timetable</Text>
-            {loading ? (
-              <Text>Loading timetable...</Text>
-            ) : error ? (
-              <Text style={styles.noTimetableData}>{error}</Text>
-            ) : subjects && subjects.length > 0 ? (
-              <FlatList
-                data={subjects.slice(0, 3)} // Limit to 3 subjects
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item, index }) => (
-                  <View style={styles.timetableItem}>
-                    <Text style={styles.subjectName}>{item.Subject}</Text>
-                    <Text style={styles.subjectTime}>{classTimes[index]}</Text>
-                  </View>
-                )}
-                style={styles.timetableList}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : (
-              <Text style={styles.noTimetableData}>No schedule available</Text>
-            )}
-          </View>
-        );
       case "leaderboard":
         return (
           <View style={styles.leaderboardContainer}>
             <Text style={styles.leaderboardTitle}>Leaderboard</Text>
             {leaderboard && leaderboard.length > 0 ? (
-              <FlatList
-                data={leaderboard}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item, index }) => (
-                  <View style={styles.leaderboardItem}>
-                    <View style={styles.leaderboardItem}>
-                      <Text style={styles.leaderboardRank}>{index + 1}</Text>
-                      <Text style={styles.leaderboardName}>
-                        {item.username}
-                      </Text>
-                      <Text style={styles.leaderboardScore}>
-                        {item.stars} ⭐
-                      </Text>
-                    </View>
-                  </View>
-                )}
-                style={styles.leaderboardList}
-                showsVerticalScrollIndicator={false}
-              />
+              /* ✅ FIX: Use .map() instead of FlatList */
+              leaderboard.map((entry, index) => (
+                <View key={index} style={styles.leaderboardItem}>
+                  <Text style={styles.leaderboardRank}>{entry.real_rank}</Text>
+                  <Text style={styles.leaderboardName}>
+                    {entry.username === userData?.username ? "You" : entry.username}
+                  </Text>
+                  <Text style={styles.leaderboardScore}>{entry.stars} ⭐</Text>
+                </View>
+              ))
             ) : (
               <Text style={styles.noLeaderboardData}>No data available</Text>
             )}
@@ -910,268 +1245,579 @@ const DashboardScreen = ({ route, navigation }) => {
 
       case "subjects":
         return (
-          <View style={styles.subjectsContainer}>
-            <Text style={styles.subjectsTitle}>Explore Subjects</Text>
-            <Text style={styles.subjectsDescription}>
-              Dive into your courses and learn at your pace!
-            </Text>
+          <>
+            {/* 1. The Subjects Card */}
+            <View style={styles.subjectsContainer}>
+              <Text style={styles.subjectsTitle}>Explore Subjects</Text>
+              <Text style={styles.subjectsDescription}>
+                Dive into your courses and learn at your pace!
+              </Text>
+              <TouchableOpacity
+                style={styles.subjectsButton}
+                onPress={() => navigation.navigate("Subject")}
+              >
+                <Text style={styles.subjectsButtonText}>View All Subjects</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subjectsButton, { marginTop: 16 }]}
+                onPress={() => navigation.navigate("Novel")}
+              >
+                <Text style={styles.subjectsButtonText}>Read your Novels</Text>
+              </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity
-              style={styles.subjectsButton}
-              onPress={() => navigation.navigate("Subject")}
-            >
-              <Text style={styles.subjectsButtonText}>View All Subjects</Text>
-            </TouchableOpacity>
+            {/* 2. The Debug Panel (Wrapped in the same Fragment)
+            <View style={{ padding: 10, flexDirection: 'row', gap: 10, justifyContent: 'center', marginBottom: 20 }}>
+              <TouchableOpacity 
+                onPress={testNotification} 
+                style={{ backgroundColor: '#864AF9', padding: 10, borderRadius: 8 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>🔔 Test Notif</Text>
+              </TouchableOpacity>
 
-            {/* Added marginTop here 👇 */}
-            <TouchableOpacity
-              style={[styles.subjectsButton, { marginTop: 16 }]}
-              onPress={() => navigation.navigate("Novel")}
-            >
-              <Text style={styles.subjectsButtonText}>Read your Novels</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity 
+                onPress={testWidget} 
+                style={{ backgroundColor: '#000', padding: 10, borderRadius: 8 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>📱 Test Widget</Text>
+              </TouchableOpacity>
+            </View> */}
+          </>
         );
       default:
         return null;
     }
   };
 
-  return (
-    <>
-      <FlatList
-        data={sections}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.container}
+  const renderPackages = () => {
+    return (
+      <ScrollView
+        contentContainerStyle={styles.packagesScroll}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={fetchRefreshedUser}
-            tintColor="#00ff00"
-            colors={["#00ff00"]}
+            refreshing={loadingPackages}
+            onRefresh={fetchMusicPackages}
+            tintColor="#864AF9"
+            colors={["#864AF9"]}
           />
         }
-      />
+      >
+        {/* --- HEADER --- */}
+        <View style={[styles.headerContainer, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.SoundTitle}>Sound Store 🎧</Text>
+            <Text style={styles.SoundDescription}>
+              Lo-Fi & White Noise for deep focus.
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={toggleMute}
+            style={{
+              padding: 10,
+              backgroundColor: isMuted ? '#FF6B6B' : '#864AF9',
+              borderRadius: 20,
+              marginLeft: 10
+            }}
+          >
+            <Text style={{ fontSize: 18 }}>{isMuted ? "🔇" : "🔊"}</Text>
+          </TouchableOpacity>
+        </View>
 
-      {showProfileModal && (
+        {loadingPackages && musicPacks.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#864AF9" />
+            <Text style={styles.loadingText}>Fetching sounds...</Text>
+          </View>
+        ) : (
+          <View style={styles.packageGrid}>
+            {musicPacks.map((pack) => {
+              const isDownloading = downloadingPackId === pack.id;
+              const isDownloaded = downloadedPacks.includes(pack.id);
+              const partialText = partialStatus[pack.id];
+              return (
+                <View
+                  key={pack.id}
+                  style={[
+                    styles.packageCard,
+                    { backgroundColor: pack.tagColor || '#FFFFFF' }
+                  ]}
+                >
+                  <View>
+                    <Text style={styles.packageTitle}>{pack.title}</Text>
+                    <Text style={styles.packageDesc}>{pack.description}</Text>
+                    <View style={styles.infoBadge}>
+                      <Text style={styles.infoBadgeText}>
+                        🎵 {pack.files.length} Tracks
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.dashedDivider} />
+
+                  {/* --- UPDATED FOOTER SECTION --- */}
+                  <View style={styles.packageFooter}>
+
+                    {/* SHOW DELETE BUTTON ONLY IF DOWNLOADED */}
+                    {isDownloaded && (
+                      <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={() => promptDelete(pack)}
+                      >
+                        <Text style={{ fontSize: 20 }}>🗑️</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* MAIN BUTTON */}
+                    <TouchableOpacity
+                      style={[
+                        styles.downloadFullBtn,
+                        isDownloading && styles.downloadingBtn,
+                        isDownloaded && styles.downloadedBtn,
+                      ]}
+                      // Logic: If downloaded, do nothing. Else download/resume.
+                      onPress={() => !isDownloaded && downloadPack(pack)}
+                      disabled={isDownloading || isDownloaded}
+                      activeOpacity={0.8}
+                    >
+                      {isDownloading ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
+                          <Text style={styles.downloadBtnText} numberOfLines={1}>
+                            {downloadStatus}
+                          </Text>
+                        </View>
+                      ) : isDownloaded ? (
+                        <Text style={[styles.downloadBtnText, { color: '#004d00' }]} numberOfLines={1}>
+                          INSTALLED ✅
+                        </Text>
+                      ) : partialText ? (
+                        // ✅ RESUME STATE
+                        <Text style={[styles.downloadBtnText, { color: '#D97706' }]} numberOfLines={1}>
+                          RESUME ({partialText}) 📥
+                        </Text>
+                      ) : (
+                        // ✅ FRESH STATE
+                        <Text style={styles.downloadBtnText} numberOfLines={1}>
+                          DOWNLOAD PACK 📥
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.cardCorner} />
+                </View>
+              );
+            })}
+          </View>
+        )}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  };
+  return (
+    <View style={styles.mainWrapper}>
+      <View style={styles.topTabContainer}>
+        <TouchableOpacity
+          style={[styles.topTab, activeScreenTab === "dashboard" && styles.activeTopTab]}
+          onPress={() => setActiveScreenTab("dashboard")}
+        >
+          <Text style={[styles.topTabText, activeScreenTab === "dashboard" && styles.activeTopTabText]}>
+            Dashboard
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.topTab, activeScreenTab === "packages" && styles.activeTopTab]}
+          onPress={() => setActiveScreenTab("packages")}
+        >
+          <Text style={[styles.topTabText, activeScreenTab === "packages" && styles.activeTopTabText]}>
+            Packages 📦
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeScreenTab === "dashboard" ? (
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.container}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={fetchRefreshedUser}
+              tintColor="#864AF9"
+              colors={["#864AF9"]}
+            />
+          }
+        >
+          {sections.map((section) => (
+            <TutorialStep key={section.type} stepId={section.id}>
+              {renderSectionContent(section)}
+            </TutorialStep>
+          ))}
+        </ScrollView>
+      ) : (
+        renderPackages()
+      )}
+
+      <Modal
+        visible={showProfileModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowProfileModal(false)}
+      >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Your Profile</Text>
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* 🔥 UPDATED CONTAINER STYLE */}
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Your Profile</Text>
 
-            <TouchableOpacity onPress={pickImage}>
-              <Image
-                source={{ uri: userData?.avatar }}
-                style={styles.modalAvatar}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.inputRow}>
-              <Text style={styles.modalLabel}>Full Name:</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.modalInput}
-                  value={tempFullName}
-                  onChangeText={setTempFullName}
-                  editable={isEditingName}
-                />
-                <TouchableOpacity
-                  style={styles.editIcon}
-                  onPress={toggleEditName}
-                >
-                  <Ionicons
-                    name={isEditingName ? "checkmark" : "pencil"}
-                    size={18}
-                    color="#864AF9"
+              {/* Profile Image */}
+              <TouchableOpacity onPress={pickImage} disabled={isUploadingImage} style={{ marginBottom: 20 }}>
+                <View>
+                  <Image
+                    source={{ uri: userData?.localAvatar || userData?.avatar }}
+                    style={[
+                      styles.modalAvatar,
+                      { opacity: isUploadingImage ? 0.5 : 1 },
+                    ]}
                   />
-                </TouchableOpacity>
-              </View>
-            </View>
+                  {/* Edit Pencil Badge (Optional Polish) */}
+                  <View style={styles.avatarBadge}>
+                    <Ionicons name="camera" size={16} color="#FFF" />
+                  </View>
 
-            <View style={styles.inputRow}>
-              <Text style={styles.modalLabel}>Username:</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.modalInput}
-                  value={tempUsername}
-                  editable={isEditingUsername}
-                  onChangeText={setTempUsername}
-                />
-                <TouchableOpacity
-                  style={styles.editIcon}
-                  onPress={() => {
-                    if (isEditingUsername) {
-                      saveUsername();
-                    } else {
-                      setIsEditingUsername(true);
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name={isEditingUsername ? "checkmark" : "pencil"}
-                    size={18}
-                    color="#864AF9"
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputRow}>
-              <Text style={styles.modalLabel}>Email:</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.modalInput}
-                  value={tempEmail}
-                  editable={isEditingEmail}
-                  onChangeText={setTempEmail}
-                />
-                <TouchableOpacity
-                  style={styles.editIcon}
-                  onPress={() => {
-                    if (isEditingEmail) {
-                      saveEmail();
-                    } else {
-                      setIsEditingEmail(true);
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name={isEditingEmail ? "checkmark" : "pencil"}
-                    size={18}
-                    color="#864AF9"
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputRow}>
-              <Text style={styles.modalLabel}>Phone:</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.modalInput}
-                  value={tempPhone}
-                  editable={isEditingPhone}
-                  onChangeText={setTempPhone}
-                  keyboardType="phone-pad"
-                />
-                <TouchableOpacity
-                  style={styles.editIcon}
-                  onPress={() => {
-                    if (isEditingPhone) {
-                      savePhone();
-                    } else {
-                      setIsEditingPhone(true);
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name={isEditingPhone ? "checkmark" : "pencil"}
-                    size={18}
-                    color="#864AF9"
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputRow}>
-              <Text style={styles.modalLabel}>Class:</Text>
-              <View style={styles.inputContainer}>
-                {isEditingClass ? (
-                  <Picker
-                    selectedValue={tempClass}
-                    style={styles.modalInput}
-                    onValueChange={(itemValue) => setTempClass(itemValue)}
-                  >
-                    <Picker.Item label="Select a class" value="" />
-                    {availableClasses.map((classItem) => (
-                      <Picker.Item
-                        key={classItem.id}
-                        label={classItem.ClassName}
-                        value={classItem.ClassName}
-                      />
-                    ))}
-                  </Picker>
-                ) : (
-                  <TextInput
-                    style={styles.modalInput}
-                    value={tempClass}
-                    editable={false}
-                  />
-                )}
-                <TouchableOpacity
-                  style={styles.editIcon}
-                  onPress={() => {
-                    if (isEditingClass) {
-                      saveClass(); // your save logic
-                    } else {
-                      setIsEditingClass(true);
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name={isEditingClass ? "checkmark" : "pencil"}
-                    size={18}
-                    color="#864AF9"
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-                <Text style={styles.logoutText}>Logout</Text>
+                  {isUploadingImage && (
+                    <View style={styles.uploadOverlay}>
+                      <Text style={{ color: "white", fontWeight: "900", fontSize: 14 }}>
+                        {uploadProgress}%
+                      </Text>
+                      <ActivityIndicator size="small" color="#ffffff" style={{ marginTop: 4 }} />
+                    </View>
+                  )}
+                </View>
               </TouchableOpacity>
 
+              {/* Form Inputs - Now wrapped in a consistent style */}
+              <View style={{ width: '100%', gap: 16 }}>
+                {/* Helper Component for Inputs */}
+                <InputField
+                  label="Full Name:"
+                  value={tempFullName}
+                  onChange={setTempFullName}
+                  isEditing={isEditingName}
+                  onToggle={toggleEditName}
+                />
+                <InputField
+                  label="Username:"
+                  value={tempUsername}
+                  onChange={setTempUsername}
+                  isEditing={isEditingUsername}
+                  onToggle={() => isEditingUsername ? saveUsername() : setIsEditingUsername(true)}
+                />
+                <InputField
+                  label="Email:"
+                  value={tempEmail}
+                  onChange={setTempEmail}
+                  isEditing={isEditingEmail}
+                  onToggle={() => isEditingEmail ? saveEmail() : setIsEditingEmail(true)}
+                />
+                <InputField
+                  label="Phone:"
+                  value={tempPhone}
+                  onChange={setTempPhone}
+                  isEditing={isEditingPhone}
+                  onToggle={() => isEditingPhone ? savePhone() : setIsEditingPhone(true)}
+                  keyboardType="phone-pad"
+                />
+
+                {/* Class Picker (Custom Handling) */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.modalLabel}>Class:</Text>
+                  <View style={styles.inputContainer}>
+                    {isEditingClass ? (
+                      <Picker
+                        selectedValue={tempClass}
+                        style={styles.modalInput}
+                        onValueChange={(itemValue) => setTempClass(itemValue)}
+                      >
+                        <Picker.Item label="Select a class" value="" />
+                        {availableClasses.map((classItem) => (
+                          <Picker.Item
+                            key={classItem.id}
+                            label={classItem.ClassName}
+                            value={classItem.ClassName}
+                          />
+                        ))}
+                      </Picker>
+                    ) : (
+                      <TextInput
+                        style={styles.modalInput}
+                        value={tempClass}
+                        editable={false}
+                      />
+                    )}
+                    <TouchableOpacity
+                      style={styles.editIcon}
+                      onPress={() => isEditingClass ? saveClass() : setIsEditingClass(true)}
+                    >
+                      <Ionicons
+                        name={isEditingClass ? "checkmark" : "pencil"}
+                        size={18}
+                        color="#000" // Changed to Black for contrast
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                  <Text style={styles.logoutText}>LOGOUT</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShowProfileModal(false)}
+                  style={styles.cancelBtn}
+                >
+                  <Text style={styles.cancelText}>CLOSE</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+      {/* --- REPORTS MODAL --- */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>All Reports</Text>
+
+            {/* Filter Tabs */}
+            <View style={styles.tabContainer}>
+              {["recent", "best", "worst"].map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.tab, activeTab === tab && styles.activeTab]}
+                  onPress={() => setActiveTab(tab)}
+                >
+                  <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                    {tab === "recent" ? "Recent" : tab === "best" ? "Top" : "Low"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* List - Safe to use FlatList here since it's inside a Modal */}
+            <FlatList
+              data={
+                activeTab === "recent"
+                  ? reports.slice(0, 20)
+                  : activeTab === "best"
+                    ? [...reports].sort((a, b) => b.Score - a.Score).slice(0, 20)
+                    : [...reports].sort((a, b) => a.Score - b.Score).slice(0, 20)
+              }
+              keyExtractor={(item, index) => index.toString()}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <View style={styles.modalReportItem}>
+                  <Text style={styles.modalReportTitle}>
+                    {item.exam_name || item.subtopic_name || "Exam"}
+                  </Text>
+                  <Text style={styles.modalReportScore}>{item.Score}%</Text>
+                </View>
+              )}
+              style={styles.modalReportList}
+            />
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.cancelText}>CLOSE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- CUSTOM DELETE CONFIRMATION MODAL --- */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Header Icon */}
+            <View style={styles.trashIconContainer}>
+              <Text style={{ fontSize: 40 }}>🗑️</Text>
+            </View>
+
+            <Text style={styles.modalTitle}>Delete Sound Pack?</Text>
+
+            <Text style={styles.modalMessage}>
+              Are you sure you want to remove
+              <Text style={{ fontWeight: 'bold', color: '#000' }}> "{packToDelete?.title}"</Text>?
+              {"\n"}You can download it again later.
+            </Text>
+
+            <View style={styles.modalBtnRow}>
+              {/* CANCEL BUTTON */}
               <TouchableOpacity
-                onPress={() => setShowProfileModal(false)}
-                style={styles.cancelBtn}
+                style={[styles.modalBtn, styles.modalBtnGhost]}
+                onPress={() => setDeleteModalVisible(false)}
               >
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.modalBtnTextBlack}>CANCEL</Text>
+              </TouchableOpacity>
+
+              {/* DELETE BUTTON */}
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnDestructive]}
+                onPress={performDelete}
+              >
+                <Text style={styles.modalBtnTextRed}>YES, DELETE</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      )}
-    </>
+      </Modal>
+
+    </View>
+  );
+};
+const DashboardScreen = (props) => {
+  const tutorialSteps = [
+    { id: 1, text: "This is your profile section. Tap here to view and edit your details!", name: "Profile" },
+    { id: 2, text: "Keep your learning streak alive! Practice daily to grow this number.", name: "Streaks" },
+    { id: 3, text: "Track your progress here. See how well you performed in recent exams.", name: "Reports" },
+    { id: 4, text: "Check your daily schedule here so you never miss a class.", name: "Timetable" },
+    { id: 5, text: "See where you stand! Compete with classmates for the top spot.", name: "Leaderboard" },
+    { id: 6, text: "Ready to start learning? Tap here to pick a subject and take a quiz.", name: "Subjects" },
+  ];
+
+  return (
+    <TutorialProvider steps={tutorialSteps}>
+      <DashboardContent {...props} />
+    </TutorialProvider>
   );
 };
 
+const COLORS = {
+  primary: "#864AF9",
+  background: "#F8F9FE",
+  cardBg: "#FFFFFF",
+  itemBg: "#F7F9FC",
+  textDark: "#2D3748",
+  textLight: "#718096",
+  textWhite: "#FFFFFF",
+  black: "#000000",
+  success: "#C6F6D5",
+  successText: "#065F46", // Dark green for contrast
+  border: "#000000",
+};
+
+// 2. DEFINE SHARED STYLES (NEO-BRUTALIST SHADOWS)
+const sharedStyles = {
+  hardShadow: {
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4, // Android hard shadow approximation
+  },
+  cardBase: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 20,
+    borderWidth: 2, // Consistent border thickness
+    borderColor: COLORS.border,
+    padding: 20,
+    marginBottom: 20,
+  },
+};
+
 const styles = StyleSheet.create({
+  // --- LAYOUT ---
   container: {
-    backgroundColor: "#F8F9FE",
+    backgroundColor: COLORS.background,
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 100, // Space for scrolling
+  },
+  mainWrapper: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  headerContainer: {
+    marginBottom: 25,
   },
 
-  // Info/Header Section
+  // --- TOP TABS ---
+  topTabContainer: {
+    flexDirection: "row",
+    backgroundColor: COLORS.cardBg,
+    padding: 6,
+    margin: 16,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: COLORS.border,
+    ...sharedStyles.hardShadow,
+  },
+  topTab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  activeTopTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.border,
+  },
+  topTabText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.textLight,
+  },
+  activeTopTabText: {
+    color: COLORS.textWhite,
+    fontWeight: "900",
+  },
+
+  // --- INFO / PROFILE CARD ---
   infoContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#864AF9",
+    backgroundColor: COLORS.primary,
     padding: 20,
     borderRadius: 20,
-    marginBottom: 20,
-    shadowColor: "#864AF9",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    ...sharedStyles.hardShadow,
   },
   leftInfo: {
     flex: 1,
   },
   hello: {
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "rgba(255, 255, 255, 0.9)",
     fontSize: 14,
-    fontWeight: "400",
+    fontWeight: "600",
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   infoUsername: {
     fontSize: 26,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontWeight: "900",
+    color: COLORS.textWhite,
     letterSpacing: 0.3,
   },
   infoAvatar: {
@@ -1179,316 +1825,336 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     borderWidth: 3,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    borderColor: COLORS.textWhite,
   },
 
-  // Streaks Section
+  // --- STANDARD CARDS (Streaks, Reports, Timetable, Leaderboard) ---
   streaksContainer: {
-    alignSelf: "center",
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    padding: 28,
-    borderRadius: 20,
+    ...sharedStyles.cardBase,
     alignItems: "center",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "rgba(134, 74, 249, 0.1)",
+    padding: 28,
+    ...sharedStyles.hardShadow,
+  },
+  reportsContainer: {
+    ...sharedStyles.cardBase,
+    ...sharedStyles.hardShadow,
+  },
+  // --- TIMETABLE CONTAINER ---
+  timetableContainer: {
+    ...sharedStyles.cardBase, // Inherits white bg, border, radius, padding
+    ...sharedStyles.hardShadow, // Inherits the pop-out shadow
+    padding: 0, // Reset padding because we want the items to flush nicely
+    overflow: 'hidden', // Keeps child borders tidy
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20, // Add padding back for the header
+    paddingBottom: 10,
+  },
+  timetableTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.textDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  editIconBtn: {
+    padding: 8,
+    backgroundColor: '#F0E6FF', // Keep a light accent or use COLORS.itemBg
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+
+  // --- TIMETABLE LIST ITEMS ---
+  timetableItem: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.itemBg,
+    marginHorizontal: 20, // Indent inside the container
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  timeStrip: {
+    backgroundColor: COLORS.primary,
+    width: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRightWidth: 2,
+    borderRightColor: COLORS.border,
+  },
+  subjectContent: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.itemBg,
+  },
+  subjectTime: {
+    color: COLORS.textWhite,
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  subjectAmPm: {
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '700',
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  subjectName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textDark,
+  },
+  noTimetableData: {
+    textAlign: 'center',
+    color: COLORS.textLight,
+    fontStyle: 'italic',
+    padding: 20,
+    paddingBottom: 30,
+  },
+
+  // --- EDITOR MODAL STYLES ---
+  editorRow: {
+    marginBottom: 16,
+  },
+  editorTimeLabel: {
+    fontWeight: '800',
+    color: COLORS.primary,
+    marginBottom: 6,
+    fontSize: 14,
+  },
+  pickerWrapper: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    height: 50,
+    justifyContent: 'center',
+  },
+  picker: {
+    width: '100%',
+    color: COLORS.textDark,
+    backgroundColor: COLORS.cardBg,
+  },
+
+  // --- ACTION BUTTONS ---
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    // Subtle shadow for buttons
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  resetBtn: {
+    backgroundColor: '#FFE5E5',
+  },
+  resetBtnText: {
+    color: '#D00000',
+    fontWeight: '800',
+  },
+  saveBtn: {
+    backgroundColor: COLORS.primary,
+  },
+  saveBtnText: {
+    color: COLORS.textWhite,
+    fontWeight: '800',
+  },
+  closeModalBtn: {
+    marginTop: 16,
+    alignSelf: 'center',
+    padding: 10,
+  },
+  closeModalText: {
+    color: COLORS.textLight,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  leaderboardContainer: {
+    ...sharedStyles.cardBase,
+    ...sharedStyles.hardShadow,
+  },
+
+  // --- CARD HEADERS & TITLES ---
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: COLORS.textDark,
+    marginBottom: 16,
   },
   streaksTitle: {
     fontSize: 18,
-    fontWeight: "600",
-    color: "#864AF9",
+    fontWeight: "800",
+    color: COLORS.primary,
     marginBottom: 8,
     letterSpacing: 0.5,
   },
   streaksCount: {
     fontSize: 36,
-    fontWeight: "800",
-    color: "#2D3748",
+    fontWeight: "900",
+    color: COLORS.textDark,
     letterSpacing: 1,
   },
-
-  // Reports Section
-  reportsContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  title: {
+  timetableTitle: {
     fontSize: 22,
-    fontWeight: "700",
-    color: "#2D3748",
+    fontWeight: "800",
+    color: COLORS.textDark,
     marginBottom: 16,
   },
+  leaderboardTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: COLORS.textDark,
+    marginBottom: 16,
+  },
+
+  // --- LIST ITEMS ---
   reportItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#F7F9FC",
+    backgroundColor: COLORS.itemBg,
     padding: 16,
     marginBottom: 12,
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#864AF9",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    // Accent Border
+    borderLeftWidth: 6,
+    borderLeftColor: COLORS.primary,
   },
   reportTitle: {
     fontSize: 16,
-    color: "#2D3748",
-    fontWeight: "600",
+    color: COLORS.textDark,
+    fontWeight: "700",
     flex: 3,
   },
   reportScore: {
     fontSize: 16,
-    color: "#864AF9",
+    color: COLORS.primary,
     flex: 1,
     textAlign: "right",
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  reportList: {
-    marginBottom: 8,
-  },
-  seeMoreButton: {
-    marginTop: 12,
-    paddingVertical: 14,
-    backgroundColor: "#864AF9",
-    borderRadius: 12,
-    alignItems: "center",
-    shadowColor: "#864AF9",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  seeMoreButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
-
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-  },
-  modalContent: {
-    // backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 24,
-    width: "90%",
-    maxHeight: "80%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 20,
-    backgroundColor: "#F7F9FC",
-    borderRadius: 12,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginHorizontal: 2,
-  },
-  activeTab: {
-    backgroundColor: "#864AF9",
-    shadowColor: "#864AF9",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  tabText: {
-    fontSize: 13,
-    color: "#718096",
-    textAlign: "center",
-    fontWeight: "600",
-  },
-  activeTabText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-  modalReportItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 14,
-    backgroundColor: "#F7F9FC",
-    borderRadius: 12,
-    marginBottom: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: "#864AF9",
-  },
-  modalReportTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#2D3748",
-  },
-  modalReportScore: {
-    fontSize: 15,
-    color: "#864AF9",
-    fontWeight: "700",
-  },
-  modalReportList: {
-    maxHeight: 400,
-  },
-  modalCloseButton: {
-    marginTop: 20,
-    paddingVertical: 14,
-    backgroundColor: "#864AF9",
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  modalCloseButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-
-  // Timetable Section
-  timetableContainer: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  timetableTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#2D3748",
-    marginBottom: 16,
-  },
-  timetableList: {
-    marginTop: 8,
-  },
-  timetableItem: {
-    backgroundColor: "#F7F9FC",
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    borderLeftWidth: 5,
-    borderLeftColor: "#864AF9",
-  },
-  subjectName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#2D3748",
-    marginBottom: 6,
-  },
-  subjectTime: {
-    fontSize: 14,
-    color: "#718096",
-    fontWeight: "500",
-  },
-  noTimetableData: {
-    fontSize: 15,
-    color: "#A0AEC0",
-    textAlign: "center",
-    marginTop: 20,
-    fontStyle: "italic",
-  },
-
-  // Leaderboard Section
-  leaderboardContainer: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  leaderboardTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#2D3748",
-    marginBottom: 16,
-  },
-  leaderboardList: {
-    marginTop: 8,
-  },
+  // timetableItem: {
+  //   backgroundColor: COLORS.itemBg,
+  //   padding: 16,
+  //   marginBottom: 12,
+  //   borderRadius: 12,
+  //   borderWidth: 2,
+  //   borderColor: COLORS.border,
+  //   borderLeftWidth: 6,
+  //   borderLeftColor: COLORS.primary,
+  // },
+  // subjectName: {
+  //   fontSize: 17,
+  //   fontWeight: "800",
+  //   color: COLORS.textDark,
+  //   marginBottom: 6,
+  // },
+  // subjectTime: {
+  //   fontSize: 14,
+  //   color: COLORS.textLight,
+  //   fontWeight: "600",
+  // },
   leaderboardItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#F7F9FC",
+    backgroundColor: COLORS.itemBg,
     padding: 16,
     marginBottom: 10,
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#FFD700",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    borderLeftWidth: 6,
+    borderLeftColor: "#FFD700", // Gold
   },
   leaderboardRank: {
     fontSize: 18,
-    fontWeight: "800",
-    color: "#864AF9",
+    fontWeight: "900",
+    color: COLORS.primary,
     width: 40,
     textAlign: "center",
   },
   leaderboardName: {
     flex: 2,
     fontSize: 16,
-    color: "#2D3748",
-    fontWeight: "600",
+    color: COLORS.textDark,
+    fontWeight: "700",
     marginLeft: 12,
   },
   leaderboardScore: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#2D3748",
-  },
-  noLeaderboardData: {
-    fontSize: 15,
-    color: "#A0AEC0",
-    textAlign: "center",
-    marginTop: 20,
-    fontStyle: "italic",
+    fontWeight: "800",
+    color: COLORS.textDark,
   },
 
-  // Subjects Section
+  // --- BUTTONS ---
+  seeMoreButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    ...sharedStyles.hardShadow,
+  },
+  seeMoreButtonText: {
+    color: COLORS.textWhite,
+    fontWeight: "800",
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+  downloadingBtn: {
+    backgroundColor: "#E2E8F0",
+    transform: [{ translateX: 2 }, { translateY: 2 }],
+    shadowOffset: { width: 0, height: 0 }, // Pressed effect
+  },
+  downloadedBtn: {
+    backgroundColor: COLORS.success,
+  },
+  downloadBtnText: {
+    color: COLORS.black,
+    fontWeight: "900",
+    fontSize: 14,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  // --- SUBJECTS & PACKAGES ---
   subjectsContainer: {
-    backgroundColor: "#864AF9",
+    backgroundColor: COLORS.primary,
     padding: 24,
     borderRadius: 20,
     alignItems: "center",
-    marginBottom: 20,
-    shadowColor: "#864AF9",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: COLORS.border,
+    ...sharedStyles.hardShadow,
   },
   subjectsTitle: {
     fontSize: 24,
-    fontWeight: "800",
-    color: "#FFFFFF",
+    fontWeight: "900",
+    color: COLORS.textWhite, // Fixed to white for contrast on purple
     marginBottom: 8,
     letterSpacing: 0.5,
   },
@@ -1498,123 +2164,497 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
     lineHeight: 22,
+    fontWeight: "500",
   },
   subjectsButton: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.cardBg,
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 12,
-    shadowColor: "#000",
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 1,
+    shadowRadius: 0,
     elevation: 4,
   },
   subjectsButtonText: {
-    color: "#864AF9",
-    fontWeight: "700",
+    color: COLORS.primary,
+    fontWeight: "800",
     fontSize: 16,
     letterSpacing: 0.5,
   },
-
-  // Profile Modal
-  modalOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    height: "100%",
+  packagesScroll: {
+    padding: 20,
+    paddingTop: 10,
+  },
+  packageCard: {
+    borderRadius: 16,
+    padding: 20,
+    minHeight: 180,
+    justifyContent: "space-between",
+    borderWidth: 3,
+    borderColor: COLORS.border,
+    marginBottom: 20,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  packageTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: COLORS.black,
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  packageDesc: {
+    fontSize: 15,
+    color: "#333",
+    fontWeight: "500",
+    marginBottom: 12,
+  },
+  infoBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  infoBadgeText: {
+    fontWeight: "800",
+    fontSize: 12,
+    color: COLORS.black,
+  },
+  dashedDivider: {
+    height: 1,
     width: "100%",
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+    borderRadius: 1,
+    marginBottom: 15,
+    opacity: 0.5,
+  },
+  packageFooter: {
+    width: "100%",
+    marginTop: "auto",
+    paddingTop: 16,
+    flexDirection: "row",
+    alignItems: "stretch", // Ensures height match
+    gap: 12, // Handles spacing between buttons
   },
 
+  // The Square Trash Button
+  deleteBtn: {
+    backgroundColor: "#FFE5E5",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#000",
+    aspectRatio: 1, // Keeps it square
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+
+  downloadFullBtn: {
+    flex: 1, // ✅ THE FIX: Always fill available space (100% if alone, Remainder if neighbor exists)
+    backgroundColor: "#fff",
+    paddingVertical: 14,
+    paddingHorizontal: 8, // Reduced slightly to prevent text cutoff on small screens
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  cardCorner: {
+    position: "absolute",
+    top: -10,
+    right: -10,
+    width: 30,
+    height: 30,
+    backgroundColor: COLORS.black,
+    transform: [{ rotate: "45deg" }],
+    opacity: 0.1,
+  },
+
+  // --- EMPTY STATES ---
+  noTimetableData: {
+    fontSize: 15,
+    color: COLORS.textLight,
+    textAlign: "center",
+    marginTop: 20,
+    fontWeight: "600",
+    fontStyle: "italic",
+  },
+  noLeaderboardData: {
+    fontSize: 15,
+    color: COLORS.textLight,
+    textAlign: "center",
+    marginTop: 20,
+    fontWeight: "600",
+    fontStyle: "italic",
+  },
+  reportList: {
+    marginBottom: 8,
+  },
+  loadingContainer: {
+    marginTop: 50,
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    color: COLORS.textLight,
+    fontWeight: "700",
+  },
+
+  // --- MODAL ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)", // Darker backdrop for focus
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 24,
+    width: width * 0.9,
+    maxWidth: 400,
+    borderWidth: 3,        // Thick border
+    borderColor: '#000',   // Pitch black
+    // Hard Shadow (Neo-Brutalist)
+    shadowColor: "#000",
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 10,
+  },
   modalTitle: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    marginBottom: 20,
-    letterSpacing: 0.5,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#000",
+    marginBottom: 24,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   modalAvatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 20,
-    borderWidth: 4,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    borderWidth: 3,
+    borderColor: "#000",
   },
-  inputRow: {
-    flexDirection: "row",
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#864AF9',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  uploadOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
-    width: "100%",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 50,
+  },
+  // INPUT STYLES
+  inputGroup: {
+    marginBottom: 12,
   },
   modalLabel: {
-    width: 80,
     fontSize: 14,
-    fontWeight: "700",
-    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "800",
+    color: "#000",
+    marginBottom: 6,
+    textTransform: "uppercase",
   },
   inputContainer: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F7F9FC",
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    borderWidth: 2,
+    borderColor: "#000", // Visible borders
+  },
+  inputContainerActive: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#864AF9", // Highlight when editing
   },
   modalInput: {
     flex: 1,
-    fontSize: 15,
-    color: "#2D3748",
-    fontWeight: "500",
+    fontSize: 16,
+    color: "#000",
+    fontWeight: "600",
   },
   editIcon: {
-    marginLeft: 10,
     padding: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#000',
   },
+  // BUTTONS
   buttonRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 24,
-    width: "100%",
+    gap: 12,
+    marginTop: 32,
   },
   logoutBtn: {
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginRight: 10,
     flex: 1,
+    backgroundColor: "#FF4757", // distinct red
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#000",
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   logoutText: {
-    color: "#864AF9",
-    fontWeight: "700",
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 14,
   },
   cancelBtn: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    width: "100%", // ✅ Add this to make it span the full width
+    backgroundColor: "#fff",
+    paddingVertical: 14,
     borderRadius: 12,
-    flex: 1,
     alignItems: "center",
+    justifyContent: "center", // ✅ Vital for centering text vertically
+    borderWidth: 2,
+    borderColor: "#000",
+    marginTop: 10, // Add some spacing from the list
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   cancelText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: "#000",
+    fontWeight: "900",
+    fontSize: 16, // Increased slightly for readability
+    textTransform: "uppercase",
+  },
+  SoundTitle: {
+    fontSize: 32, // Big and bold
+    fontWeight: "900",
+    color: "#864AF9", // Primary Purple
+    marginBottom: 8,
+    letterSpacing: 1,
+    textTransform: "uppercase", // Neo-brutalist style
+  },
+  SoundDescription: {
     fontSize: 16,
+    color: "#2D3748", // Dark Grey for readability
+    fontWeight: "600",
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  // --- FILTER TABS ---
+  tabContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    backgroundColor: COLORS.itemBg,
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginHorizontal: 2,
+    borderWidth: 2,
+    borderColor: "transparent", // Invisible border by default prevents layout jump
+  },
+  activeTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.border, // Border appears when active
+    // Active Tab Shadow
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  activeTabText: {
+    color: COLORS.textWhite,
+    fontWeight: "900",
   },
 
-  error: {
-    color: "#F56565",
-    fontSize: 14,
-    textAlign: "center",
+  // --- REPORT LIST ---
+  modalReportList: {
     marginTop: 8,
+    marginBottom: 20,
+    maxHeight: 400,
+  },
+  modalReportItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: COLORS.itemBg,
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    // Accent Border on Left
+    borderLeftWidth: 6,
+    borderLeftColor: COLORS.primary,
+  },
+  modalReportTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.textDark,
+    flex: 1,
+    marginRight: 10,
+  },
+  modalReportScore: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: "900",
+  },
+  rowLabel: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '700',
+    marginBottom: 5,
+    textTransform: 'uppercase'
+  },
+  timeRangeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  timeBox: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 8,
+    width: '42%', // Fits two boxes nicely
+    alignItems: 'center'
+  },
+  timeLabel: {
+    fontSize: 10,
+    color: '#A0AEC0',
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  timeValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#864AF9', // Main brand color
+  },
+  modalContainer: {
+    width: "85%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 3,
+    borderColor: "#000",
+    // Hard Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 10,
+    alignItems: "center",
+  },
+  trashIconContainer: {
+    marginBottom: 16,
+    backgroundColor: "#FFE5E5", // Light Red Circle
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#000",
+  },
+  modalBtnRow: {
+    width: "100%",
+    flexDirection: "row", // Side by Side buttons
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#000",
+    // Button Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  modalBtnDestructive: {
+    backgroundColor: "#FF3B30", // Red
+  },
+  modalBtnGhost: {
+    backgroundColor: "#FFF", // White
+  },
+  modalBtnTextRed: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+  modalBtnTextBlack: {
+    color: "#000",
+    fontWeight: "900",
+    fontSize: 14,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#555",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
   },
 });
 

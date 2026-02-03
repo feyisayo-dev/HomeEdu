@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DropDownPicker from "react-native-dropdown-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from '@expo/vector-icons';
+
 
 import { Image } from "react-native";
 export default function RegisterScreen({ navigation }) {
@@ -21,10 +23,12 @@ export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmpassword, setconfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [fullName, setFullName] = useState("");
-  const [dob, setDob] = useState(new Date()); // Store date of birth
-  const [showPicker, setShowPicker] = useState(false); // Toggle picker visibility
+  const [dob, setDob] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
   const [parentName, setParentName] = useState("");
   const [parentContact, setParentContact] = useState("");
   const [address, setAddress] = useState("");
@@ -32,22 +36,35 @@ export default function RegisterScreen({ navigation }) {
   const [selectedClass, setSelectedClass] = useState("");
   const [classes, setClasses] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState("");
-  const [countryList, setCountryList] = useState([]); // State for countries
+  const [countryList, setCountryList] = useState([]);
   const [open, setOpen] = useState(false);
   const [currentStage, setCurrentStage] = useState(1);
 
   const totalStages = 4;
-
+const dropdownItems = useMemo(() => {
+    return countryList.map((country) => ({
+      label: `${country.name}`,
+      value: country.short_name,
+      icon: () => (
+        <Image
+          source={{
+            uri: `https://homeedu.fsdgroup.com.ng/${country.flag_img}`,
+          }}
+          style={{ width: 20, height: 15, resizeMode: "contain" }}
+        />
+      ),
+    }));
+  }, [countryList]);
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Fetch Classes (Converted to Axios for consistency)
+     
       try {
         const classResponse = await axios.get(
           "https://homeedu.fsdgroup.com.ng/api/getClassForUser"
         );
         const classData = classResponse.data;
 
-        // specific check depends on your API structure
+       
         if (classData.status === 200 && classData.class) {
           setClasses(classData.class);
         } else {
@@ -57,7 +74,7 @@ export default function RegisterScreen({ navigation }) {
         console.error("Error fetching classes:", error.message);
       }
 
-      // 2. Fetch Countries (Existing logic is good)
+     
       try {
         const cachedCountries = await AsyncStorage.getItem("countries");
 
@@ -82,7 +99,7 @@ export default function RegisterScreen({ navigation }) {
         }
       } catch (error) {
         console.error("Error fetching countries:", error.message);
-        // Optional: Don't alert on mount errors to avoid annoying user immediately
+       
       }
     };
 
@@ -91,72 +108,97 @@ export default function RegisterScreen({ navigation }) {
 
   const onChange = (event, selectedDate) => {
     if (selectedDate) {
-      setDob(selectedDate); // Update DOB with selected date
+      setDob(selectedDate);
     }
-    setShowPicker(false); // Hide the picker
+    setShowPicker(false);
   };
 
-  const showDatePicker = () => setShowPicker(true); // Show the picker
+  const showDatePicker = () => setShowPicker(true);
 
   const handleRegister = async () => {
-    // Validate inputs (Optional, but highly recommended)
-    if (
-      !username ||
-      !fullName ||
-      !dob ||
-      !email ||
-      !password ||
-      !confirmpassword ||
-      !phoneNumber ||
-      !selectedClass ||
-      !selectedCountry ||
-      !parentName ||
-      !parentContact ||
-      !address
-    ) {
-      Alert.alert("Error", "Please fill all fields.");
-      return;
-    }
-
-    if (password !== confirmpassword) {
-      Alert.alert("Error", "Passwords do not match.");
-      return;
-    }
-
-    try {
-      // Make the POST request to the server
-      const response = await axios.post(
-        "https://homeedu.fsdgroup.com.ng/api/AddStudent",
-        {
-          username,
-          fullName,
-          dob,
-          email,
-          password,
-          phoneNumber,
-          class: selectedClass,
-          parentName,
-          parentContact,
-          address,
-        }
-      );
-
-      // Handle success
-      Alert.alert("Success", response.data.message);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Login" }],
-      });
-    } catch (error) {
-      // Handle errors
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Registration failed"
-      );
-
-      console.log("This is the error gotten", response.data.message);
-    }
+ 
+  const validateEmail = (email) => {
+    return String(email)
+      .toLowerCase()
+      .match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
   };
+
+ 
+ 
+  if (!username || !fullName || !dob || !email || !password || !phoneNumber || !selectedClass || !parentName || !parentContact || !address) {
+    Alert.alert("Missing Information", "Please fill in all required fields.");
+    return;
+  }
+
+ 
+  if (username.length > 188) {
+    Alert.alert("Invalid Username", "Username is too long.");
+    return;
+  }
+
+ 
+  if (fullName.length < 6) {
+    Alert.alert("Invalid Name", "Full name must be at least 6 characters.");
+    return;
+  }
+
+ 
+  if (!validateEmail(email)) {
+    Alert.alert("Invalid Email", "Please enter a valid email address.");
+    return;
+  }
+
+ 
+  if (password.length < 8) {
+    Alert.alert("Weak Password", "Password must be at least 8 characters long.");
+    return;
+  }
+
+ 
+  if (password !== confirmpassword) {
+    Alert.alert("Error", "Passwords do not match.");
+    return;
+  }
+
+ 
+  if (phoneNumber.length < 10) {
+    Alert.alert("Invalid Phone", "Please enter a valid phone number.");
+    return;
+  }
+
+  try {
+   
+    const response = await axios.post(
+      "https://homeedu.fsdgroup.com.ng/api/AddStudent",
+      {
+        username,
+        fullName,
+        dob,
+        email,
+        password,
+        phoneNumber,
+        class: selectedClass,
+        parentName,
+        parentContact,
+        address,
+      }
+    );
+
+    Alert.alert("Success", "Account created successfully!");
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
+  } catch (error) {
+   
+    const serverMessage = error.response?.data?.errors 
+      ? Object.values(error.response.data.errors).flat().join("\n") 
+      : "Registration failed. Please try again.";
+
+    Alert.alert("Registration Error", serverMessage);
+    console.log("Validation details:", error.response?.data);
+  }
+};
 
   const renderStage = () => {
     switch (currentStage) {
@@ -194,10 +236,10 @@ export default function RegisterScreen({ navigation }) {
             {showPicker && (
               <DateTimePicker
                 value={dob}
-                mode="date" // Only date selection
+                mode="date"
                 display="spinner"
                 onChange={onChange}
-                maximumDate={new Date()} // Prevent future dates
+                maximumDate={new Date()}
               />
             )}
           </>
@@ -212,22 +254,49 @@ export default function RegisterScreen({ navigation }) {
               value={email}
               onChangeText={setEmail}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#666666"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#666666"
-              secureTextEntry
-              value={confirmpassword}
-              onChangeText={setconfirmPassword}
-            />
+            {/* Password Field */}
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.inputData}
+                placeholder="Password"
+                placeholderTextColor="#666666"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.icon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye" : "eye-off"} 
+                  size={20} 
+                  color="#666666" 
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Confirm Password Field */}
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.inputData}
+                placeholder="Confirm Password"
+                placeholderTextColor="#666666"
+                secureTextEntry={!showConfirmPassword}
+                value={confirmpassword}
+                onChangeText={setconfirmPassword}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.icon}
+              >
+                <Ionicons 
+                  name={showConfirmPassword ? "eye" : "eye-off"} 
+                  size={20} 
+                  color="#666666" 
+                />
+              </TouchableOpacity>
+            </View>
           </>
         );
       case 3:
@@ -242,24 +311,16 @@ export default function RegisterScreen({ navigation }) {
               onChangeText={setPhoneNumber}
             />
             <Text style={styles.label}>Select Country</Text>
-            <DropDownPicker
+           <DropDownPicker
               open={open}
               value={selectedCountry}
-              items={countryList.map((country) => ({
-                label: `${country.name}`,
-                value: country.short_name,
-                icon: () => (
-                  <Image
-                    source={{
-                      uri: `https://homeedu.fsdgroup.com.ng/${country.flag_img}`,
-                    }}
-                    style={{ width: 20, height: 15, resizeMode: "contain" }}
-                  />
-                ),
-              }))}
+              items={dropdownItems} 
               setOpen={setOpen}
               setValue={setSelectedCountry}
               placeholder="Select a Country"
+              listMode="SCROLLVIEW"
+              zIndex={1000}
+              zIndexInverse={3000}
             />
           </>
         );
@@ -312,7 +373,7 @@ export default function RegisterScreen({ navigation }) {
             />
           </>
         );
-      // Add more stages as needed
+     
       default:
         return null;
     }
@@ -340,7 +401,7 @@ export default function RegisterScreen({ navigation }) {
           <View style={styles.buttonRow}>
             {currentStage > 1 ? (
               <TouchableOpacity
-                style={[styles.button, styles.buttonOutline]} // Optional: different style for Prev
+                style={[styles.button, styles.buttonOutline]}
                 onPress={() => setCurrentStage((prev) => prev - 1)}
               >
                 <Text style={[styles.buttonText, styles.textOutline]}>
@@ -348,7 +409,7 @@ export default function RegisterScreen({ navigation }) {
                 </Text>
               </TouchableOpacity>
             ) : (
-              // Spacer to keep "Next" on the right if there is no "Previous"
+             
               <View style={{ flex: 1, marginHorizontal: 5 }} />
             )}
 
@@ -388,17 +449,17 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingLeft: 20,
     display: "flex",
-    // alignItems: 'center',
+   
     justifyContent: "center",
   },
   toptext: {
     fontSize: 36,
-    fontWeight: 700,
+    fontWeight: "700",
     color: "#fcfcfc",
   },
   topsubtext: {
     fontSize: 16,
-    fontWeight: 400,
+    fontWeight: "400",
     color: "#cccccc",
   },
   container: {
@@ -406,7 +467,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 40,
     backgroundColor: "#fcfcfc",
-    borderTopLeftRadius: 20, // React Native uses numbers for radius, not percentages typically
+    borderTopLeftRadius: 20,
     borderTopRightRadius: 0,
     display: "flex",
     flexDirection: "column",
@@ -447,20 +508,20 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   bottomArea: {
-    marginTop: 'auto', // Pushes this section to the bottom if there is extra space
+    marginTop: 'auto',
     paddingBottom: 20,
   },
   buttonRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20, // Space between buttons and the login link
+    marginBottom: 20,
   },
   button: {
     backgroundColor: "#864AF9",
     paddingVertical: 12,
     borderRadius: 10,
     marginHorizontal: 5,
-    flex: 1, // ✅ This makes buttons share width equally
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -483,7 +544,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   linkText: {
-    color: "#333", // Darker color for readability
+    color: "#333",
     fontSize: 14,
   },
   LogLink: {
@@ -510,5 +571,33 @@ const styles = StyleSheet.create({
   dateButtonText: {
     color: "white",
     fontSize: 16,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "#dddddd",
+    borderWidth: 1,
+    borderColor: "white",
+    borderRadius: 5,
+    marginBottom: 24,
+    paddingHorizontal: 10,
+  },
+  inputData: {
+    flex: 1,
+    paddingVertical: 10,
+    color: "black",
+    fontSize: 14,
+  },
+  input: {
+    borderWidth: 1,
+    marginBottom: 24,
+    padding: 10,
+    borderRadius: 5,
+    borderColor: "white",
+    color: "black",
+    backgroundColor: "#dddddd",
+  },
+  icon: {
+    paddingLeft: 5,
   }
 });
