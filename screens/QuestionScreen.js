@@ -27,7 +27,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import Svg, { Path } from "react-native-svg";
 import { BackgroundMusicContext } from "../context/BackgroundMusicProvider";
-
+import CalculatorModal from '../components/CalculatorModal';
 const Breadcrumb = memo(
   ({ currentQuestion }) => {
     if (!currentQuestion) return null;
@@ -1259,103 +1259,11 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
       </Modal>
 
       {/* --- CALCULATOR MODAL --- */}
-      <Modal
-        visible={calculatorVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setCalculatorVisible(false)}
-      >
-        <View style={styles.calcOverlay}>
-          <View style={styles.calcContainer}>
-            {/* Display Screen */}
-            <View style={styles.calcDisplay}>
-              <Text
-                style={styles.calcDisplayText}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                {calcInput || "0"}
-              </Text>
-            </View>
-
-            {/* Keypad */}
-            <View style={styles.calcKeypad}>
-              {[
-                "C",
-                "⌫",
-                "%",
-                "÷",
-                "7",
-                "8",
-                "9",
-                "×",
-                "4",
-                "5",
-                "6",
-                "-",
-                "1",
-                "2",
-                "3",
-                "+",
-                "00",
-                "0",
-                ".",
-                "=",
-              ].map((btn) => (
-                <TouchableOpacity
-                  key={btn}
-                  style={[
-                    styles.calcBtn,
-                    ["C", "⌫"].includes(btn) && styles.calcBtnRed,
-                    ["÷", "×", "-", "+", "="].includes(btn) &&
-                    styles.calcBtnPurple,
-                  ]}
-                  onPress={() => {
-                    if (btn === "C") setCalcInput("");
-                    else if (btn === "⌫") setCalcInput(calcInput.slice(0, -1));
-                    else if (btn === "=") {
-                      try {
-                        // Safe evaluation ensuring valid math characters only
-                        const safeExpression = calcInput
-                          .replace(/×/g, "*")
-                          .replace(/÷/g, "/")
-                          .replace(/[^0-9+\-*/.%]/g, ""); // Security filter
-
-                        // eslint-disable-next-line no-eval
-                        const result = eval(safeExpression);
-                        setCalcInput(String(result));
-                      } catch (e) {
-                        setCalcInput("Error");
-                      }
-                    } else {
-                      setCalcInput(calcInput + btn);
-                    }
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.calcBtnText,
-                      ["÷", "×", "-", "+", "="].includes(btn) && {
-                        color: "#FFF",
-                      },
-                    ]}
-                  >
-                    {btn}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Close Button */}
-            <TouchableOpacity
-              style={styles.calcCloseBtn}
-              onPress={() => setCalculatorVisible(false)}
-            >
-              <Text style={styles.calcCloseText}>CLOSE CALCULATOR</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+<CalculatorModal 
+  visible={calculatorVisible}
+  onClose={() => setCalculatorVisible(false)}
+  userClass={userData?.class} 
+/>
 
       <Modal
         transparent={true}

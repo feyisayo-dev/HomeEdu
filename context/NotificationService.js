@@ -83,38 +83,53 @@ export const scheduleDynamicStreak = async (streak, stars) => {
   console.log(`✅ Scheduled: "${title}"`);
 };
 
-// --- 4. TIMETABLE ALERT (1 Hour Before) ---
-export const scheduleTimetableAlert = async (firstSubject, timeString) => {
-  // Input: "Math", "3:30 PM"
-  // Goal: Notify at "2:30 PM"
-  
-  if (!timeString) return;
+// --- 4. NEW: SCHEDULE WEEKLY CLASSES (7 Days at once) ---
+export const scheduleWeeklyClasses = async (subjects) => {
+  // Cancel old ones so we don't get duplicates
+  await Notifications.cancelAllScheduledNotificationsAsync();
 
-  // 1. Parse Time "3:30 PM" -> Hours/Minutes
-  const [time, modifier] = timeString.split(' ');
-  let [hours, minutes] = time.split(':');
-  
-  if (hours === '12') hours = '00';
-  if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
-  else hours = parseInt(hours, 10);
+  if (!subjects || subjects.length === 0) return;
 
-  // 2. Subtract 1 Hour
-  let notifyHour = hours - 1;
-  if (notifyHour < 0) notifyHour = 23; // Handle midnight edge case
+  // Loop through the next 7 days
+  for (let i = 0; i < 7; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() + i); // Move forward i days
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `⏳ Class in 1 Hour: ${firstSubject}`,
-      body: `Get ready! Your ${firstSubject} session starts at ${timeString}.`,
-      sound: true,
-    },
-    trigger: {
-      hour: notifyHour,
-      minute: parseInt(minutes, 10),
-      repeats: true, // Assuming daily schedule for simplicity
-    },
-  });
-  console.log(`✅ Class Alert set for ${notifyHour}:${minutes}`);
+    const dayOfWeek = date.getDay(); // 0 = Sun, 6 = Sat
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    // 1. Pick the Time
+    // Weekends: 10:00 AM | Weekdays: 3:30 PM
+    const triggerHour = isWeekend ? 10 : 15; // 15 = 3 PM
+    const triggerMinute = 30;
+
+    // 2. Notification Time (1 Hour Before)
+    let notifyHour = triggerHour - 1; 
+
+    // 3. Pick a Subject (Rotate through the list)
+    // If you have 3 subjects, Day 1 = Subj 1, Day 2 = Subj 2, Day 3 = Subj 3, Day 4 = Subj 1...
+    const subject = subjects[i % subjects.length]; 
+    const subjectName = subject.Subject || subject.name || "General Revision";
+
+    // 4. Construct the Trigger Date
+    const triggerDate = new Date(date);
+    triggerDate.setHours(notifyHour, triggerMinute, 0, 0);
+
+    // Don't schedule if the time has already passed today
+    if (triggerDate < new Date()) continue;
+
+    // 5. Schedule It
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `⏳ Class in 1 Hour: ${subjectName}`,
+        body: `Get ready! Your ${subjectName} session starts at ${triggerHour > 12 ? triggerHour - 12 : triggerHour}:${triggerMinute} ${triggerHour >= 12 ? 'PM' : 'AM'}.`,
+        sound: true,
+      },
+      trigger: triggerDate, // Fires at this exact date & time
+    });
+    
+    console.log(`✅ Scheduled ${subjectName} for ${date.toDateString()} at ${notifyHour}:${triggerMinute}`);
+  }
 };
 
 // --- 5. IMMEDIATE TEST TRIGGER ---

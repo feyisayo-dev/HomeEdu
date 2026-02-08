@@ -7,42 +7,45 @@ const PuppetMascot = ({ mood = 'idle', source }) => {
   const floatAnim = useRef(new Animated.Value(0)).current; 
   const talkAnim = useRef(new Animated.Value(1)).current;  
   const bounceAnim = useRef(new Animated.Value(0)).current;
-  // 1. NEW: Rotation Value
   const rotateAnim = useRef(new Animated.Value(0)).current; 
+  // 1. NEW: Hide Animation (For Error)
+  const hideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // RESET everything when mood changes
-    floatAnim.setValue(0);
-    talkAnim.setValue(1);
-    bounceAnim.setValue(0);
-    rotateAnim.setValue(0);
-    
-    // Stop any running animations
+    // Reset Logic
     floatAnim.stopAnimation();
     talkAnim.stopAnimation();
     bounceAnim.stopAnimation();
     rotateAnim.stopAnimation();
+    hideAnim.stopAnimation();
 
+    // Default Resets
+    rotateAnim.setValue(0);
+    talkAnim.setValue(1);
+    
+    // Check Mood
     if (mood === 'idle') {
+      Animated.spring(hideAnim, { toValue: 0, useNativeDriver: true }).start(); // Come up
       runIdleAnimation();
-    } else if (mood === 'talking') {
+    } 
+    else if (mood === 'talking') {
+      Animated.spring(hideAnim, { toValue: 0, useNativeDriver: true }).start();
       runTalkingAnimation();
-    } else if (mood === 'success') {
+    } 
+    else if (mood === 'success') {
+      Animated.spring(hideAnim, { toValue: 0, useNativeDriver: true }).start();
       runSuccessAnimation();
+    } 
+    else if (mood === 'error') {
+      runErrorAnimation(); // Go Down
     }
   }, [mood]);
 
   const runIdleAnimation = () => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -10, duration: 1500,
-          easing: Easing.inOut(Easing.ease), useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0, duration: 1500,
-          easing: Easing.inOut(Easing.ease), useNativeDriver: true,
-        }),
+        Animated.timing(floatAnim, { toValue: -10, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     ).start();
   };
@@ -56,59 +59,47 @@ const PuppetMascot = ({ mood = 'idle', source }) => {
     ).start();
   };
 
-  // 2. UPDATED SUCCESS: Jump AND Spin
   const runSuccessAnimation = () => {
-    // Run them in parallel (Jump + Rotate at same time)
     Animated.parallel([
-      // A. The Jump (Up and Down)
       Animated.sequence([
-        Animated.spring(bounceAnim, {
-          toValue: -80, // Jump Higher
-          friction: 4,
-          useNativeDriver: true,
-        }),
-        Animated.spring(bounceAnim, {
-          toValue: 0, // Land
-          friction: 5,
-          useNativeDriver: true,
-        }),
+        Animated.spring(bounceAnim, { toValue: -80, friction: 4, useNativeDriver: true }),
+        Animated.spring(bounceAnim, { toValue: 0, friction: 5, useNativeDriver: true }),
       ]),
-      // B. The Spin (0 -> 360 degrees)
       Animated.timing(rotateAnim, {
-        toValue: 1, // Goes from 0 to 1
-        duration: 800, // Takes 0.8 seconds to spin
-        easing: Easing.out(Easing.exp), // Fast start, slow stop
-        useNativeDriver: true,
+        toValue: 1, duration: 800, easing: Easing.out(Easing.exp), useNativeDriver: true,
       })
     ]).start();
   };
 
-  // 3. Helper: Convert 0-1 to "0deg"-"360deg"
-  const spin = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
-  });
+  // 2. NEW: Error Animation (Sink Down)
+  const runErrorAnimation = () => {
+    Animated.timing(hideAnim, {
+      toValue: 100, // Move down 100 pixels (Hiding)
+      duration: 800,
+      easing: Easing.bounce, // A little bounce when hitting bottom
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const spin = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   return (
-    <View style={styles.container}>
+    <View style={styles.circleContainer}>
       <Animated.View
         style={{
           transform: [
-            { translateY: Animated.add(floatAnim, bounceAnim) }, 
+            { translateY: Animated.add(Animated.add(floatAnim, bounceAnim), hideAnim) }, // Adds float + bounce + HIDE
             { scaleY: talkAnim }, 
-            { scaleX: mood === 'talking' ? 
-                talkAnim.interpolate({ inputRange: [0.95, 1.05], outputRange: [1.02, 0.98] }) 
-                : 1 
-            },
-            { rotate: spin } // ✅ Apply the spin here
+            { scaleX: mood === 'talking' ? talkAnim.interpolate({ inputRange: [0.95, 1.05], outputRange: [1.02, 0.98] }) : 1 },
+            { rotate: spin } 
           ],
         }}
       >
         <LottieView
           source={source}
-          autoPlay={false} 
-          loop={false}
-          style={{ width: 250, height: 250 }}
+          autoPlay={true} // Force play to fix web issue
+          loop={true}
+          style={{ width: 180, height: 180 }} // Made smaller to fit circle
         />
       </Animated.View>
     </View>
@@ -116,10 +107,16 @@ const PuppetMascot = ({ mood = 'idle', source }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  circleContainer: {
+    width: 220,
+    height: 220,
+    borderRadius: 110, // Perfect Circle
+    backgroundColor: '#FFEAA7', // Light Yellow Background
+    borderWidth: 4,
+    borderColor: '#FDCB6E',
     justifyContent: 'center',
     alignItems: 'center',
-    height: 300,
+    overflow: 'hidden', // ✅ CRITICAL: Crops the mascot when it goes down
   },
 });
 

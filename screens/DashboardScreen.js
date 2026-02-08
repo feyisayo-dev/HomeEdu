@@ -111,7 +111,6 @@ const DashboardContent = ({ route, navigation }) => {
     setActiveTimeType(type);
 
     // fullTimeString looks like "10:00 AM - 11:00 AM"
-    // We split it by the " - " separator
     const parts = fullTimeString.split(' - ');
     const timeToParse = type === 'start' ? parts[0] : (parts[1] || parts[0]);
 
@@ -130,7 +129,7 @@ const DashboardContent = ({ route, navigation }) => {
       date.setHours(hours);
       date.setMinutes(minutes);
     } else {
-      // Default fallback if string is messy
+      // Default fallback
       date.setMinutes(0);
       if (type === 'start') date.setHours(9);
       else date.setHours(10);
@@ -181,22 +180,6 @@ const DashboardContent = ({ route, navigation }) => {
       setTempTimetable(newData);
     }
   };
-  // --- TEMPORARY DEBUG FUNCTIONS ---
-  // const testNotification = async () => {
-  //     console.log("🔔 Testing Notification...");
-
-  //     // Call the new helper we just added
-  //     await NotificationService.sendImmediateTest();
-
-  //     // No need for Alert.alert, the notification itself is the alert
-  //   };
-
-  //   const testWidget = async () => {
-  //     console.log("📱 Force Updating Widget...");
-  //     // Force update with dummy high numbers
-  //     await updateHomeWidget(50, 999); 
-  //     Alert.alert("Widget Updated", "Check your home screen widget. It should show 50 Streak & 999 Stars.");
-  //   };
 
   const updateHomeWidget = async (streakCount, starCount) => {
     try {
@@ -221,43 +204,24 @@ const DashboardContent = ({ route, navigation }) => {
     const setupServices = async () => {
       if (!userData) return;
 
-      // 1. Register
       const hasPermission = await NotificationService.registerForPushNotifications();
 
       if (hasPermission) {
-        // 2. Schedule Dynamic Streak (Using REAL data)
         await NotificationService.scheduleDynamicStreak(streaks, userData.stars || 0);
-
-        // 3. Schedule Timetable (1 Hour Before First Class)
-        // Logic: Get today's schedule based on Weekend/Weekday
-        const currentDay = new Date().getDay();
-        const isWeekend = currentDay === 0 || currentDay === 6;
-
-        // Define first slot time based on your rules
-        const firstSlotTime = isWeekend ? "10:00 AM" : "3:30 PM";
-
-        // Pick the first subject from your state (if available)
-        const firstSubject = subjects.length > 0 ? subjects[0].Subject : "General Revision";
-
-        await NotificationService.scheduleTimetableAlert(firstSubject, firstSlotTime);
+        await NotificationService.scheduleWeeklyClasses(subjects);
       }
-
-      // 4. UPDATE WIDGET (See Part 3 below)
       await updateHomeWidget(streaks, userData.stars);
     };
 
     setupServices();
-  }, [userData, streaks, subjects]); // Re-run if streaks or subjects change
+  }, [userData, streaks, subjects]);
 
   // Tutorial startup logic
   useEffect(() => {
     const runTutorial = async () => {
       if (tutorialHasStarted.current) return;
-      // const removeTutorial = await AsyncStorage.removeItem('hasSeenDashboardTutorial');
-
       try {
         const hasSeenTutorial = await AsyncStorage.getItem('hasSeenDashboardTutorial');
-
         if (hasSeenTutorial !== 'true' && canStart && userData) {
           tutorialHasStarted.current = true;
           setTimeout(() => {
@@ -268,7 +232,6 @@ const DashboardContent = ({ route, navigation }) => {
         console.log('❌ Tutorial setup error:', error);
       }
     };
-
     runTutorial();
   }, [canStart, userData, start]);
 
@@ -280,7 +243,6 @@ const DashboardContent = ({ route, navigation }) => {
         tutorialHasStarted.current = false;
       }
     };
-
     handleTutorialComplete();
   }, [isActive]);
 
@@ -359,10 +321,6 @@ const DashboardContent = ({ route, navigation }) => {
     }, [userData])
   );
 
-  // ========== INSERT YOUR FETCH FUNCTIONS HERE ==========
-  // fetchMusicPackages, checkExistingDownloads, downloadPack
-  // fetchClasses, fetchSubjects, fetchReports, fetchLeaderboard
-  // =====================================================
   const checkExistingDownloads = async (packs) => {
     const loadedIds = [];
     const partials = {};
@@ -372,13 +330,12 @@ const DashboardContent = ({ route, navigation }) => {
       const dirInfo = await FileSystem.getInfoAsync(packFolder);
 
       if (!dirInfo.exists) {
-        continue; // Folder doesn't exist, skip
+        continue;
       }
 
       let foundCount = 0;
       const totalFiles = pack.files.length;
 
-      // Check each file specifically
       for (const file of pack.files) {
         const safeName = getSafeFileName(file.name);
         const fileUri = packFolder + safeName;
@@ -389,13 +346,11 @@ const DashboardContent = ({ route, navigation }) => {
         }
       }
 
-      // Logic: Is it Done, Partial, or Empty?
       if (foundCount === totalFiles) {
         loadedIds.push(pack.id);
       } else if (foundCount > 0) {
         partials[pack.id] = `${foundCount}/${totalFiles}`;
       } else {
-        // Folder exists but is empty (0 files), clean it up
         await FileSystem.deleteAsync(packFolder, { idempotent: true });
       }
     }
@@ -437,7 +392,6 @@ const DashboardContent = ({ route, navigation }) => {
       let count = 0;
       const total = pack.files.length;
 
-      // 1. Count what we already have (Resuming)
       for (const file of pack.files) {
         const safeName = getSafeFileName(file.name);
         const finalUri = packFolder + safeName;
@@ -445,30 +399,23 @@ const DashboardContent = ({ route, navigation }) => {
         if (fileInfo.exists) count++;
       }
 
-      // 2. Download loop
       for (const file of pack.files) {
         const safeName = getSafeFileName(file.name);
-        const finalUri = packFolder + safeName;   // real_song.mp3
-        const tempUri = finalUri + ".tmp";        // real_song.mp3.tmp
+        const finalUri = packFolder + safeName;
+        const tempUri = finalUri + ".tmp";
 
-        // Update UI
         setDownloadStatus(`${count}/${total}`);
 
-        // Check if we already have the FINAL file
         const fileInfo = await FileSystem.getInfoAsync(finalUri);
 
         if (!fileInfo.exists) {
-          // A. Download to TEMP file first
-          // This overwrites any old corrupt .tmp file automatically
           const downloadRes = await FileSystem.downloadAsync(file.url, tempUri);
 
           if (downloadRes.status !== 200) {
-            // Server error? Delete the temp file so we don't leave trash
             await FileSystem.deleteAsync(tempUri, { idempotent: true });
             throw new Error(`Failed to download ${file.name}`);
           }
 
-          // B. Success! Rename .tmp -> .mp3 (This is instant/atomic)
           await FileSystem.moveAsync({
             from: tempUri,
             to: finalUri
@@ -491,8 +438,6 @@ const DashboardContent = ({ route, navigation }) => {
     } catch (error) {
       console.log("Download Interrupted:", error);
       Alert.alert("Download Paused", "Internet connection lost. Tap 'Resume' to continue.");
-
-      // Update the button to show "Resume (3/5)"
       checkExistingDownloads([pack]);
 
     } finally {
@@ -505,31 +450,23 @@ const DashboardContent = ({ route, navigation }) => {
     return name.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".mp3";
   };
 
-  // 1. OPEN MODAL (Triggered by the Trash Button)
   const promptDelete = (pack) => {
     setPackToDelete(pack);
     setDeleteModalVisible(true);
   };
 
-  // 2. EXECUTE DELETE (Triggered by "Yes" in Modal)
   const performDelete = async () => {
     if (!packToDelete) return;
 
     try {
-      // A. Delete Folder
       const packFolder = `${FileSystem.documentDirectory}music_packs/${packToDelete.id}/`;
       await FileSystem.deleteAsync(packFolder, { idempotent: true });
-
-      // B. Update UI Instantly
       setDownloadedPacks((prev) => prev.filter((id) => id !== packToDelete.id));
-
-      // C. Close Modal
       setDeleteModalVisible(false);
       setPackToDelete(null);
 
     } catch (e) {
       console.error(e);
-      // Optional: Show a "toast" or error state here if needed
     }
   };
 
@@ -572,9 +509,7 @@ const DashboardContent = ({ route, navigation }) => {
 
   const fetchReports = async () => {
     try {
-      // Clear previous errors before trying
       setError(null);
-
       const response = await axios.get(
         `https://homeedu.fsdgroup.com.ng/api/report/${userData?.username}`
       );
@@ -592,7 +527,6 @@ const DashboardContent = ({ route, navigation }) => {
         setError("No reports found.");
       }
     } catch (err) {
-      // ✅ LOGIC: If there is no response, it's a Network Error
       if (!err.response) {
         setError("No Internet Connection ⚠️");
       } else if (err.response?.status === 404) {
@@ -623,13 +557,10 @@ const DashboardContent = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error(error);
-      // ✅ If fetch fails, we assume network issues since we can't reach the server
-      // You can set a specific state here if you want, e.g., setLeaderboardError(true)
     } finally {
       setLoading(false);
     }
   };
-
 
   const truncateText = (text, max = 18) => {
     if (!text) return null;
@@ -673,10 +604,6 @@ const DashboardContent = ({ route, navigation }) => {
       setIsEditingName(true);
     }
   };
-
-  // ========== INSERT YOUR OTHER SAVE FUNCTIONS HERE ==========
-  // saveUsername, saveEmail, savePhone, saveClass
-  // ===========================================================
 
   const saveUsername = async () => {
     const formData = new FormData();
@@ -921,31 +848,22 @@ const DashboardContent = ({ route, navigation }) => {
     { type: "subjects", id: 6, text: "Ready to start learning? Tap here to pick a subject and take a quiz.", name: "Subjects" },
   ], []);
 
-  if (!userData) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#864AF9" />
-      </View>
-    );
-  }
+  // ✅ MOVED THESE UP BEFORE THE `if (!userData)` CHECK
   useEffect(() => {
     const loadTimetable = async () => {
       try {
-        // Try to get saved custom timetable first
         const saved = await AsyncStorage.getItem('customTimetable');
         const classTimes = generateClassTimes();
 
         if (saved) {
           setTimetableData(JSON.parse(saved));
         } else if (subjects && subjects.length > 0) {
-          // Fallback: Use API subjects if no custom save exists
           const defaultData = subjects.slice(0, 3).map((sub, index) => ({
             time: classTimes[index] || "00:00",
             subject: sub.Subject
           }));
           setTimetableData(defaultData);
         } else {
-          // Fallback: Empty slots if nothing exists
           const emptyData = classTimes.map(time => ({ time, subject: "Free Period" }));
           setTimetableData(emptyData);
         }
@@ -956,19 +874,18 @@ const DashboardContent = ({ route, navigation }) => {
 
     loadTimetable();
   }, [subjects]);
+
   const openTimetableEditor = () => {
-    setTempTimetable(JSON.parse(JSON.stringify(timetableData))); // Deep copy
+    setTempTimetable(JSON.parse(JSON.stringify(timetableData)));
     setIsEditingTimetable(true);
   };
 
-  // 3. Update Text in Temp State
   const handleTimetableChange = (text, index) => {
     const newData = [...tempTimetable];
     newData[index].subject = text;
     setTempTimetable(newData);
   };
 
-  // 4. Save to Storage
   const saveTimetable = async () => {
     try {
       setTimetableData(tempTimetable);
@@ -980,7 +897,6 @@ const DashboardContent = ({ route, navigation }) => {
     }
   };
 
-  // 5. Reset to Default (API)
   const resetTimetable = async () => {
     try {
       await AsyncStorage.removeItem('customTimetable');
@@ -995,6 +911,16 @@ const DashboardContent = ({ route, navigation }) => {
       console.error(e);
     }
   };
+
+  // ✅ CHECK IS NOW AT THE BOTTOM
+  if (!userData) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#864AF9" />
+      </View>
+    );
+  }
+
   const renderSectionContent = (item) => {
     switch (item.type) {
       case "info":
@@ -1029,7 +955,6 @@ const DashboardContent = ({ route, navigation }) => {
             {loading ? (
               <ActivityIndicator size="small" color="#864AF9" />
             ) : error ? (
-              // ✅ DISPLAY THE CUSTOM NETWORK MESSAGE HERE
               <View style={{ padding: 20, alignItems: 'center' }}>
                 <Text style={{ fontSize: 30 }}>📶</Text>
                 <Text style={{ color: 'red', fontWeight: 'bold', textAlign: 'center', marginTop: 10 }}>
@@ -1041,7 +966,6 @@ const DashboardContent = ({ route, navigation }) => {
               </View>
             ) : (
               <>
-                {/* Reports List */}
                 {reports.slice(0, 2).map((report, index) => (
                   <View key={index} style={styles.reportItem}>
                     <Text style={styles.reportTitle}>
@@ -1070,7 +994,6 @@ const DashboardContent = ({ route, navigation }) => {
       case "timetable":
         return (
           <View style={styles.timetableContainer}>
-            {/* Header Row */}
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.timetableTitle}>Today's Timetable</Text>
               <TouchableOpacity onPress={openTimetableEditor} style={styles.editIconBtn}>
@@ -1078,13 +1001,11 @@ const DashboardContent = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* List */}
             {loading ? (
               <ActivityIndicator size="small" color="#864AF9" style={{ marginVertical: 20 }} />
             ) : timetableData.length > 0 ? (
               timetableData.map((item, index) => (
                 <View key={index} style={styles.timetableItem}>
-                  {/* Left Accent Strip */}
                   <View style={styles.timeStrip}>
                     <Text style={styles.subjectTime}>{item.time.split(' ')[0]}</Text>
                     <Text style={styles.subjectAmPm}>{item.time.split(' ')[1]}</Text>
@@ -1098,7 +1019,6 @@ const DashboardContent = ({ route, navigation }) => {
               <Text style={styles.noTimetableData}>No schedule available</Text>
             )}
 
-            {/* --- Edit Timetable Modal --- */}
             <Modal
               visible={isEditingTimetable}
               transparent={true}
@@ -1114,7 +1034,6 @@ const DashboardContent = ({ route, navigation }) => {
 
                   <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
                     {tempTimetable.map((item, index) => {
-                      // Safety split for display
                       const parts = item.time.includes(' - ')
                         ? item.time.split(' - ')
                         : [item.time, "12:00 PM"];
@@ -1123,9 +1042,7 @@ const DashboardContent = ({ route, navigation }) => {
                         <View key={index} style={styles.editorRow}>
                           <Text style={styles.rowLabel}>Period {index + 1}</Text>
 
-                          {/* ⏱️ TIME RANGE ROW */}
                           <View style={styles.timeRangeContainer}>
-                            {/* Start Time Button */}
                             <TouchableOpacity
                               style={styles.timeBox}
                               onPress={() => openTimePicker(index, item.time, 'start')}
@@ -1136,7 +1053,6 @@ const DashboardContent = ({ route, navigation }) => {
 
                             <Ionicons name="arrow-forward" size={16} color="#bbb" />
 
-                            {/* End Time Button */}
                             <TouchableOpacity
                               style={styles.timeBox}
                               onPress={() => openTimePicker(index, item.time, 'end')}
@@ -1146,7 +1062,6 @@ const DashboardContent = ({ route, navigation }) => {
                             </TouchableOpacity>
                           </View>
 
-                          {/* 📚 SUBJECT PICKER */}
                           <View style={styles.pickerWrapper}>
                             <Picker
                               selectedValue={item.subject}
@@ -1170,7 +1085,6 @@ const DashboardContent = ({ route, navigation }) => {
                     })}
                   </ScrollView>
 
-                  {/* 🕒 THE ACTUAL PICKER COMPONENT */}
                   {showTimePicker && (
                     <DateTimePicker
                       testID="dateTimePicker"
@@ -1181,9 +1095,7 @@ const DashboardContent = ({ route, navigation }) => {
                       onChange={onTimeChange}
                     />
                   )}
-                  {/* Note: display="spinner" forces the wheel roll effect */}
 
-                  {/* iOS needs a manual Close button for the spinner if it's not in a modal */}
                   {Platform.OS === 'ios' && showTimePicker && (
                     <TouchableOpacity
                       style={styles.closePickerBtn}
@@ -1227,7 +1139,6 @@ const DashboardContent = ({ route, navigation }) => {
           <View style={styles.leaderboardContainer}>
             <Text style={styles.leaderboardTitle}>Leaderboard</Text>
             {leaderboard && leaderboard.length > 0 ? (
-              /* ✅ FIX: Use .map() instead of FlatList */
               leaderboard.map((entry, index) => (
                 <View key={index} style={styles.leaderboardItem}>
                   <Text style={styles.leaderboardRank}>{entry.real_rank}</Text>
@@ -1246,7 +1157,6 @@ const DashboardContent = ({ route, navigation }) => {
       case "subjects":
         return (
           <>
-            {/* 1. The Subjects Card */}
             <View style={styles.subjectsContainer}>
               <Text style={styles.subjectsTitle}>Explore Subjects</Text>
               <Text style={styles.subjectsDescription}>
@@ -1264,24 +1174,13 @@ const DashboardContent = ({ route, navigation }) => {
               >
                 <Text style={styles.subjectsButtonText}>Read your Novels</Text>
               </TouchableOpacity>
+              {/* <TouchableOpacity
+                style={[styles.subjectsButton, { marginTop: 16 }]}
+                onPress={() => navigation.navigate("Test")}
+              >
+                <Text style={styles.subjectsButtonText}>Web</Text>
+              </TouchableOpacity> */}
             </View>
-
-            {/* 2. The Debug Panel (Wrapped in the same Fragment)
-            <View style={{ padding: 10, flexDirection: 'row', gap: 10, justifyContent: 'center', marginBottom: 20 }}>
-              <TouchableOpacity 
-                onPress={testNotification} 
-                style={{ backgroundColor: '#864AF9', padding: 10, borderRadius: 8 }}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>🔔 Test Notif</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                onPress={testWidget} 
-                style={{ backgroundColor: '#000', padding: 10, borderRadius: 8 }}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>📱 Test Widget</Text>
-              </TouchableOpacity>
-            </View> */}
           </>
         );
       default:
@@ -1303,7 +1202,6 @@ const DashboardContent = ({ route, navigation }) => {
           />
         }
       >
-        {/* --- HEADER --- */}
         <View style={[styles.headerContainer, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.SoundTitle}>Sound Store 🎧</Text>
@@ -1355,10 +1253,8 @@ const DashboardContent = ({ route, navigation }) => {
 
                   <View style={styles.dashedDivider} />
 
-                  {/* --- UPDATED FOOTER SECTION --- */}
                   <View style={styles.packageFooter}>
 
-                    {/* SHOW DELETE BUTTON ONLY IF DOWNLOADED */}
                     {isDownloaded && (
                       <TouchableOpacity
                         style={styles.deleteBtn}
@@ -1368,14 +1264,12 @@ const DashboardContent = ({ route, navigation }) => {
                       </TouchableOpacity>
                     )}
 
-                    {/* MAIN BUTTON */}
                     <TouchableOpacity
                       style={[
                         styles.downloadFullBtn,
                         isDownloading && styles.downloadingBtn,
                         isDownloaded && styles.downloadedBtn,
                       ]}
-                      // Logic: If downloaded, do nothing. Else download/resume.
                       onPress={() => !isDownloaded && downloadPack(pack)}
                       disabled={isDownloading || isDownloaded}
                       activeOpacity={0.8}
@@ -1392,12 +1286,10 @@ const DashboardContent = ({ route, navigation }) => {
                           INSTALLED ✅
                         </Text>
                       ) : partialText ? (
-                        // ✅ RESUME STATE
                         <Text style={[styles.downloadBtnText, { color: '#D97706' }]} numberOfLines={1}>
                           RESUME ({partialText}) 📥
                         </Text>
                       ) : (
-                        // ✅ FRESH STATE
                         <Text style={styles.downloadBtnText} numberOfLines={1}>
                           DOWNLOAD PACK 📥
                         </Text>
@@ -1470,11 +1362,9 @@ const DashboardContent = ({ route, navigation }) => {
             contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* 🔥 UPDATED CONTAINER STYLE */}
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Your Profile</Text>
 
-              {/* Profile Image */}
               <TouchableOpacity onPress={pickImage} disabled={isUploadingImage} style={{ marginBottom: 20 }}>
                 <View>
                   <Image
@@ -1484,7 +1374,6 @@ const DashboardContent = ({ route, navigation }) => {
                       { opacity: isUploadingImage ? 0.5 : 1 },
                     ]}
                   />
-                  {/* Edit Pencil Badge (Optional Polish) */}
                   <View style={styles.avatarBadge}>
                     <Ionicons name="camera" size={16} color="#FFF" />
                   </View>
@@ -1500,9 +1389,7 @@ const DashboardContent = ({ route, navigation }) => {
                 </View>
               </TouchableOpacity>
 
-              {/* Form Inputs - Now wrapped in a consistent style */}
               <View style={{ width: '100%', gap: 16 }}>
-                {/* Helper Component for Inputs */}
                 <InputField
                   label="Full Name:"
                   value={tempFullName}
@@ -1533,7 +1420,6 @@ const DashboardContent = ({ route, navigation }) => {
                   keyboardType="phone-pad"
                 />
 
-                {/* Class Picker (Custom Handling) */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.modalLabel}>Class:</Text>
                   <View style={styles.inputContainer}>
@@ -1566,7 +1452,7 @@ const DashboardContent = ({ route, navigation }) => {
                       <Ionicons
                         name={isEditingClass ? "checkmark" : "pencil"}
                         size={18}
-                        color="#000" // Changed to Black for contrast
+                        color="#000"
                       />
                     </TouchableOpacity>
                   </View>
@@ -1589,7 +1475,7 @@ const DashboardContent = ({ route, navigation }) => {
           </ScrollView>
         </View>
       </Modal>
-      {/* --- REPORTS MODAL --- */}
+
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -1600,7 +1486,6 @@ const DashboardContent = ({ route, navigation }) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>All Reports</Text>
 
-            {/* Filter Tabs */}
             <View style={styles.tabContainer}>
               {["recent", "best", "worst"].map((tab) => (
                 <TouchableOpacity
@@ -1615,7 +1500,6 @@ const DashboardContent = ({ route, navigation }) => {
               ))}
             </View>
 
-            {/* List - Safe to use FlatList here since it's inside a Modal */}
             <FlatList
               data={
                 activeTab === "recent"
@@ -1638,16 +1522,15 @@ const DashboardContent = ({ route, navigation }) => {
             />
 
             <TouchableOpacity
-              style={styles.cancelBtn}
+              style={styles.cancelReportBtn}
               onPress={() => setModalVisible(false)}
             >
-              <Text style={styles.cancelText}>CLOSE</Text>
+              <Text style={styles.cancelReportText}>CLOSE</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* --- CUSTOM DELETE CONFIRMATION MODAL --- */}
       <Modal
         visible={deleteModalVisible}
         transparent={true}
@@ -1656,7 +1539,6 @@ const DashboardContent = ({ route, navigation }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            {/* Header Icon */}
             <View style={styles.trashIconContainer}>
               <Text style={{ fontSize: 40 }}>🗑️</Text>
             </View>
@@ -1670,7 +1552,6 @@ const DashboardContent = ({ route, navigation }) => {
             </Text>
 
             <View style={styles.modalBtnRow}>
-              {/* CANCEL BUTTON */}
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnGhost]}
                 onPress={() => setDeleteModalVisible(false)}
@@ -1678,7 +1559,6 @@ const DashboardContent = ({ route, navigation }) => {
                 <Text style={styles.modalBtnTextBlack}>CANCEL</Text>
               </TouchableOpacity>
 
-              {/* DELETE BUTTON */}
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnDestructive]}
                 onPress={performDelete}
@@ -1945,9 +1825,11 @@ const styles = StyleSheet.create({
 
   // --- ACTION BUTTONS ---
   buttonRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
+    alignItems: "center", // ✅ Ensures they align vertically
     gap: 12,
-    marginTop: 24,
+    marginTop: 32,
+    width: "100%",        // ✅ Ensures the row fills the modal width
   },
   actionBtn: {
     flex: 1,
@@ -2423,31 +2305,40 @@ const styles = StyleSheet.create({
     borderColor: '#000',
   },
   // BUTTONS
-  buttonRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 32,
-  },
   logoutBtn: {
-    flex: 1,
-    backgroundColor: "#FF4757", // distinct red
+    flex: 1,              // ✅ Both buttons take 50% width
+    backgroundColor: "#FF4757",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#000",
+    // Hard Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+
+  cancelBtn: {
+    flex: 1,              // ✅ Both buttons take 50% width
+    backgroundColor: "#fff",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2,
     borderColor: "#000",
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 0,
+    elevation: 4,
   },
-  logoutText: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-    fontSize: 14,
-  },
-  cancelBtn: {
-    width: "100%", // ✅ Add this to make it span the full width
+  cancelReportBtn: {
+    // flex: 1,
     backgroundColor: "#fff",
     paddingVertical: 14,
     borderRadius: 12,
@@ -2461,7 +2352,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 0,
   },
+
+  logoutText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
   cancelText: {
+    color: "#000",
+    fontWeight: "900",
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  cancelReportText:{
     color: "#000",
     fontWeight: "900",
     fontSize: 16, // Increased slightly for readability

@@ -19,7 +19,7 @@ import SubtopicScreen from './screens/SubtopicScreen';
 import ExplanationScreen from './screens/ExplanationScreen';
 import ExampleScreen from './screens/ExampleScreen';
 import ExamScreen from './screens/ExamScreen';
-import JsonTestScreen from './screens/test_screen';
+import QuestionTestScreen from './screens/test_screen';
 import NovelScreen from './screens/NovelScreen';
 import PassageScreen from './screens/PassageScreen';
 import ErrorBoundary from './screens/errors/indexScreen';
@@ -77,7 +77,7 @@ const AppNavigator = () => {
         <Stack.Screen name="Explanation" component={ExplanationScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Example" component={ExampleScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Question" component={QuestionScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Test" component={JsonTestScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Test" component={QuestionTestScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Novel" component={NovelScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Passage" component={PassageScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Exam" component={ExamScreen} options={{ headerShown: false }} />
