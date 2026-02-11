@@ -30,7 +30,7 @@ import * as NotificationService from '../context/NotificationService'; // Update
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { StatsWidget } from '../src/widgets/StatsWidget';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
+import JoinSchoolModal from '../components/JoinMySchool';
 const { width } = Dimensions.get("window");
 
 const InputField = ({ label, value, onChange, isEditing, onToggle, keyboardType = 'default' }) => (
@@ -104,6 +104,7 @@ const DashboardContent = ({ route, navigation }) => {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [packToDelete, setPackToDelete] = useState(null); // Stores the pack object
   const [partialStatus, setPartialStatus] = useState({});
+  const [SchoolmodalVisible, setSchoolModalVisible] = useState(false);
 
   // Helper: Open picker for specific side (Start or End)
   const openTimePicker = (index, fullTimeString, type) => {
@@ -1180,6 +1181,11 @@ const DashboardContent = ({ route, navigation }) => {
               >
                 <Text style={styles.subjectsButtonText}>Web</Text>
               </TouchableOpacity> */}
+              <TouchableOpacity
+                style={[styles.subjectsButton, { marginTop: 16 }]}
+                onPress={() => setSchoolModalVisible(true)}>
+                <Text style={styles.subjectsButtonText}>Join My School</Text>
+              </TouchableOpacity>
             </View>
           </>
         );
@@ -1475,7 +1481,11 @@ const DashboardContent = ({ route, navigation }) => {
           </ScrollView>
         </View>
       </Modal>
-
+      <JoinSchoolModal
+        isVisible={SchoolmodalVisible}
+        onClose={() => setSchoolModalVisible(false)}
+        onJoinSuccess={() => console.log("Refresh Dashboard")}
+      />
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -2365,7 +2375,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.5,
   },
-  cancelReportText:{
+  cancelReportText: {
     color: "#000",
     fontWeight: "900",
     fontSize: 16, // Increased slightly for readability

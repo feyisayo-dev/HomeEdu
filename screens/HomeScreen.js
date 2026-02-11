@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserContext } from '../context/UserContext';
 
 // ⚠️ CHANGE THIS VERSION NUMBER EVERY TIME YOU BUILD A NEW APK
-const CURRENT_APP_VERSION = "1.1.6"; 
+const CURRENT_APP_VERSION = "1.1.5"; 
 const currentTime = new Date().getTime();
 // ⚠️ REPLACE WITH THE LINK TO YOUR JSON FILE
 const VERSION_CHECK_URL = `https://www.fsdgroup.com.ng/Edu/version.json?time=${currentTime}`; 
