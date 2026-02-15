@@ -62,6 +62,8 @@ export default function LoginScreen({ navigation }) {
           "userData",
           JSON.stringify(response.data.userData)
         );
+        const token = response.data.accessToken;
+         await AsyncStorage.setItem('token', token);
         setUserData(response.data.userData);
         navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
       } else {

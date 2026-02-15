@@ -31,6 +31,7 @@ import { requestWidgetUpdate } from 'react-native-android-widget';
 import { StatsWidget } from '../src/widgets/StatsWidget';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import JoinSchoolModal from '../components/JoinMySchool';
+import ParentEmailCheck from '../components/ParentModal';
 const { width } = Dimensions.get("window");
 
 const InputField = ({ label, value, onChange, isEditing, onToggle, keyboardType = 'default' }) => (
@@ -105,6 +106,8 @@ const DashboardContent = ({ route, navigation }) => {
   const [packToDelete, setPackToDelete] = useState(null); // Stores the pack object
   const [partialStatus, setPartialStatus] = useState({});
   const [SchoolmodalVisible, setSchoolModalVisible] = useState(false);
+  const [ParentModalVisible, setParentModalVisible] = useState(false);
+
 
   // Helper: Open picker for specific side (Start or End)
   const openTimePicker = (index, fullTimeString, type) => {
@@ -1481,11 +1484,15 @@ const DashboardContent = ({ route, navigation }) => {
           </ScrollView>
         </View>
       </Modal>
+
       <JoinSchoolModal
         isVisible={SchoolmodalVisible}
         onClose={() => setSchoolModalVisible(false)}
         onJoinSuccess={() => console.log("Refresh Dashboard")}
       />
+
+      <ParentEmailCheck />
+
       <Modal
         visible={modalVisible}
         transparent={true}

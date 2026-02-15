@@ -3,7 +3,8 @@ import {
   View, Text, TouchableOpacity, Modal, TextInput,
   StyleSheet, FlatList, ActivityIndicator, Alert
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Ensure @expo/vector-icons is installed
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 1. Import AsyncStorage
 
 const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
   const [step, setStep] = useState(1); // 1: Code, 2: Details
@@ -22,13 +23,13 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
 
     setLoading(true);
     try {
-      // This endpoint should return the School ID and list of Classes available
       const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/verify-school/${schoolCode}`);
       const data = await response.json();
 
-      if (response.ok) {
+      if (response.ok && data.status === 200) {
         console.log("School Data:", data);
-        setSchoolData(data.data); // { id: "uuid", name: "Best Brains", classes: ["JSS 1", "JSS 2"] }
+        // FIX 1: Access data.data to get the actual school object
+        setSchoolData(data.data);
         setStep(2); // Move to next step
       } else {
         Alert.alert("Invalid Code", "School not found.");
@@ -52,7 +53,8 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
 
       // Expecting data.subjects = ["Mathematics", "Physics", "English"]
       if (response.ok) {
-        setAvailableSubjects(data.subjects);
+        console.log("Subjects for class:", data);
+        setAvailableSubjects(data.subjects || []);
       }
     } catch (error) {
       console.error(error);
@@ -78,11 +80,21 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
 
     setLoading(true);
     try {
+      // 1. Retrieve the Token
+      const token = await AsyncStorage.getItem('token');
+
+      if (!token) {
+        Alert.alert("Error", "You are not logged in.");
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch('https://homeedu.fsdgroup.com.ng/api/join-school', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Add Authorization Bearer token here
+          'Accept': 'application/json', // Good practice for Laravel APIs
+          'Authorization': `Bearer ${token}` // 👈 ADDED THIS
         },
         body: JSON.stringify({
           school_code: schoolCode,
@@ -91,12 +103,19 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
         })
       });
 
+      const responseData = await response.json(); // Parse JSON to get error messages if any
+
       if (response.ok) {
         Alert.alert("Success", `You have joined ${schoolData.name}!`);
         onJoinSuccess();
         onClose();
       } else {
-        Alert.alert("Failed", "Could not join school.");
+        // Handle Token Expiry specifically
+        if (response.status === 401) {
+          Alert.alert("Session Expired", "Please login again.");
+        } else {
+          Alert.alert("Failed", responseData.message || "Could not join school.");
+        }
       }
     } catch (e) {
       Alert.alert("Error", e.message);
@@ -144,7 +163,8 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
               {/* Class Selection */}
               <Text style={styles.label}>Select Your Class</Text>
               <FlatList
-                data={schoolData?.classes || []} // e.g. ["JSS 1", "JSS 2"]
+                // FIX 2: Use available_classes to match API
+                data={schoolData?.available_classes || []}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={(item) => item}
@@ -179,7 +199,7 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
                           {selectedSubjects.includes(item) && <Ionicons name="checkmark-circle" size={16} color="white" />}
                         </TouchableOpacity>
                       )}
-                      ListEmptyComponent={<Text style={{ color: '#999', fontStyle: 'italic' }}>No teachers found for this class yet.</Text>}
+                      ListEmptyComponent={<Text style={{ color: '#999', fontStyle: 'italic' }}>No subjects found for this class.</Text>}
                     />
                   )}
 
