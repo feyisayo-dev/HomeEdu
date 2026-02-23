@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import * as Device from 'expo-device';
+
 // --- CONFIGURATION ---
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -11,8 +11,7 @@ Notifications.setNotificationHandler({
 });
 
 // --- 1. DYNAMIC COPYWRITING ENGINE ---
-const getMotivationMessage = (streak, stars) => {
-  // Logic: High Streak vs Low Streak
+const getMotivationMessage = (streak) => {
   if (streak >= 7) {
     const texts = [
       `🔥 ${streak} Day Streak! You are UNSTOPPABLE!`,
@@ -28,7 +27,6 @@ const getMotivationMessage = (streak, stars) => {
     ];
     return texts[Math.floor(Math.random() * texts.length)];
   } else {
-    // Zero Streak - Urgency needed
     const texts = [
       `😢 You have 0 Streak. Start today!`,
       `The leaderboard is moving without you. 🏃‍♂️`,
@@ -60,96 +58,118 @@ export const registerForPushNotifications = async () => {
   return true;
 };
 
-// --- 3. DYNAMIC STREAK NOTIFICATION ---
-export const scheduleDynamicStreak = async (streak, stars) => {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-
-  const title = getMotivationMessage(streak, stars);
+// --- 3. DYNAMIC STREAK NOTIFICATION (no cancel-all here) ---
+const _scheduleStreakNotification = async (streak, stars) => {
+  const title = getMotivationMessage(streak);
   const body = getStarMessage(stars);
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: title,
-      body: body,
+      title,
+      body,
       sound: true,
       color: '#864AF9',
     },
     trigger: {
-      hour: 18, // 6:00 PM Daily Check-in
+      hour: 18, // 6:00 PM Daily
       minute: 0,
       repeats: true,
     },
   });
-  console.log(`✅ Scheduled: "${title}"`);
+  console.log(`✅ Streak notification scheduled: "${title}"`);
 };
 
-// --- 4. NEW: SCHEDULE WEEKLY CLASSES (7 Days at once) ---
-export const scheduleWeeklyClasses = async (subjects) => {
-  // Cancel old ones so we don't get duplicates
-  await Notifications.cancelAllScheduledNotificationsAsync();
-
+// --- 4. WEEKLY CLASS REMINDERS (no cancel-all here) ---
+const _scheduleWeeklyClasses = async (subjects) => {
   if (!subjects || subjects.length === 0) return;
 
-  // Loop through the next 7 days
   for (let i = 0; i < 7; i++) {
     const date = new Date();
-    date.setDate(date.getDate() + i); // Move forward i days
+    date.setDate(date.getDate() + i);
 
     const dayOfWeek = date.getDay(); // 0 = Sun, 6 = Sat
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-    // 1. Pick the Time
-    // Weekends: 10:00 AM | Weekdays: 3:30 PM
-    const triggerHour = isWeekend ? 10 : 15; // 15 = 3 PM
-    const triggerMinute = 30;
+    // Weekends: remind at 9:00 AM (for 10:00 AM class)
+    // Weekdays: remind at 2:30 PM (for 3:30 PM class)
+    const notifyHour = isWeekend ? 9 : 14;
+    const notifyMinute = isWeekend ? 0 : 30;
 
-    // 2. Notification Time (1 Hour Before)
-    let notifyHour = triggerHour - 1; 
+    const classHour = isWeekend ? 10 : 15;
+    const classMinute = 30;
 
-    // 3. Pick a Subject (Rotate through the list)
-    // If you have 3 subjects, Day 1 = Subj 1, Day 2 = Subj 2, Day 3 = Subj 3, Day 4 = Subj 1...
-    const subject = subjects[i % subjects.length]; 
-    const subjectName = subject.Subject || subject.name || "General Revision";
+    // Guard: skip if notify hour goes negative (edge case)
+    if (notifyHour < 0) continue;
 
-    // 4. Construct the Trigger Date
+    // Rotate subjects across days
+    const subject = subjects[i % subjects.length];
+    const subjectName = subject.Subject || subject.name || 'General Revision';
+
+    // Build the exact trigger date & time
     const triggerDate = new Date(date);
-    triggerDate.setHours(notifyHour, triggerMinute, 0, 0);
+    triggerDate.setHours(notifyHour, notifyMinute, 0, 0);
 
-    // Don't schedule if the time has already passed today
+    // Skip if this time has already passed
     if (triggerDate < new Date()) continue;
 
-    // 5. Schedule It
+    // Format class time for the notification body
+    const displayHour = classHour > 12 ? classHour - 12 : classHour;
+    const displayMinute = String(classMinute).padStart(2, '0');
+    const displayPeriod = classHour >= 12 ? 'PM' : 'AM';
+
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `⏳ Class in 1 Hour: ${subjectName}`,
-        body: `Get ready! Your ${subjectName} session starts at ${triggerHour > 12 ? triggerHour - 12 : triggerHour}:${triggerMinute} ${triggerHour >= 12 ? 'PM' : 'AM'}.`,
+        body: `Get ready! Your ${subjectName} session starts at ${displayHour}:${displayMinute} ${displayPeriod}.`,
         sound: true,
+        color: '#864AF9',
       },
-      trigger: triggerDate, // Fires at this exact date & time
+      trigger: triggerDate,
     });
-    
-    console.log(`✅ Scheduled ${subjectName} for ${date.toDateString()} at ${notifyHour}:${triggerMinute}`);
+
+    console.log(`✅ Scheduled "${subjectName}" for ${date.toDateString()} at ${notifyHour}:${String(notifyMinute).padStart(2, '0')}`);
   }
 };
 
-// --- 5. IMMEDIATE TEST TRIGGER ---
+// --- 5. MASTER RESCHEDULE (single entry point — cancels once, then schedules both) ---
+export const rescheduleAll = async (streak, stars, subjects) => {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  console.log('🗑️ All old notifications cleared.');
+
+  await _scheduleStreakNotification(streak, stars);
+  await _scheduleWeeklyClasses(subjects);
+
+  console.log('✅ All notifications rescheduled.');
+};
+
+// Convenience exports if you ever need to call them individually
+// (They still cancel-all to stay safe when called standalone)
+export const scheduleDynamicStreak = async (streak, stars) => {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await _scheduleStreakNotification(streak, stars);
+};
+
+export const scheduleWeeklyClasses = async (subjects) => {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await _scheduleWeeklyClasses(subjects);
+};
+
+// --- 6. IMMEDIATE TEST TRIGGER ---
 export const sendImmediateTest = async () => {
-  // 1. Check permissions first
   const hasPermission = await registerForPushNotifications();
   if (!hasPermission) {
-    alert("Permission missing! Check phone settings.");
+    alert('Permission missing! Check phone settings.');
     return;
   }
 
-  // 2. Schedule immediate notification
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "🔔 It Works!",
-      body: "If you see this, your notifications are fixed.",
+      title: '🔔 It Works!',
+      body: 'If you see this, your notifications are set up correctly.',
       sound: true,
       color: '#864AF9',
     },
-    trigger: null, // 'null' means fire immediately
+    trigger: null, // Fire immediately
   });
-  console.log("✅ Test notification fired");
+  console.log('✅ Test notification fired.');
 };

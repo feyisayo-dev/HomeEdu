@@ -4,18 +4,21 @@ import {
   StyleSheet, FlatList, ActivityIndicator, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // 1. Import AsyncStorage
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
-  const [step, setStep] = useState(1); // 1: Code, 2: Details
+  const [step, setStep] = useState(1); // 1: Code, 2: Details, 3: Conflict
   const [loading, setLoading] = useState(false);
 
   // Data
   const [schoolCode, setSchoolCode] = useState('');
-  const [schoolData, setSchoolData] = useState(null); // Holds school info & classes
+  const [schoolData, setSchoolData] = useState(null); 
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [availableSubjects, setAvailableSubjects] = useState([]);
+  
+  // Conflict Data
+  const [conflictMessage, setConflictMessage] = useState('');
 
   // --- API: VERIFY SCHOOL CODE ---
   const verifySchoolCode = async () => {
@@ -27,10 +30,8 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
       const data = await response.json();
 
       if (response.ok && data.status === 200) {
-        console.log("School Data:", data);
-        // FIX 1: Access data.data to get the actual school object
         setSchoolData(data.data);
-        setStep(2); // Move to next step
+        setStep(2); 
       } else {
         Alert.alert("Invalid Code", "School not found.");
       }
@@ -47,13 +48,10 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
     setLoading(true);
 
     try {
-      // Fetch teachers for this school + class, get unique subjects
       const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/get-class-subjects?school_code=${schoolCode}&class=${className}`);
       const data = await response.json();
 
-      // Expecting data.subjects = ["Mathematics", "Physics", "English"]
       if (response.ok) {
-        console.log("Subjects for class:", data);
         setAvailableSubjects(data.subjects || []);
       }
     } catch (error) {
@@ -73,14 +71,13 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
   };
 
   // --- FINAL: JOIN SCHOOL ---
-  const submitJoin = async () => {
+  const submitJoin = async (forceJoin = false) => {
     if (!selectedClass || selectedSubjects.length === 0) {
       return Alert.alert("Incomplete", "Please select a class and at least one subject.");
     }
 
     setLoading(true);
     try {
-      // 1. Retrieve the Token
       const token = await AsyncStorage.getItem('token');
 
       if (!token) {
@@ -93,24 +90,32 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json', // Good practice for Laravel APIs
-          'Authorization': `Bearer ${token}` // 👈 ADDED THIS
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           school_code: schoolCode,
           class_name: selectedClass,
-          subjects: selectedSubjects
+          subjects: selectedSubjects,
+          confirm_leave: forceJoin
         })
       });
 
-      const responseData = await response.json(); // Parse JSON to get error messages if any
+      const responseData = await response.json();
 
-      if (response.ok) {
-        Alert.alert("Success", `You have joined ${schoolData.name}!`);
+      if (response.ok && responseData.status === 200) {
+        // SUCCESS
+        Alert.alert("Success", responseData.message || `You have joined ${schoolData.name}!`);
         onJoinSuccess();
-        onClose();
-      } else {
-        // Handle Token Expiry specifically
+        handleClose(); // Reset state and close
+      } 
+      // --- HANDLE EXISTING SCHOOL CONFLICT WITH CUSTOM UI ---
+      else if (response.status === 409 && responseData.requires_confirmation) {
+        setLoading(false);
+        setConflictMessage(responseData.message);
+        setStep(3); // Move to Custom Conflict UI
+      } 
+      else {
         if (response.status === 401) {
           Alert.alert("Session Expired", "Please login again.");
         } else {
@@ -120,19 +125,33 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
     } catch (e) {
       Alert.alert("Error", e.message);
     } finally {
-      setLoading(false);
+      if (loading && step !== 3) {
+        setLoading(false);
+      }
     }
   };
 
+  // Reset modal state when closing
+  const handleClose = () => {
+    setStep(1);
+    setSchoolCode('');
+    setSelectedClass(null);
+    setSelectedSubjects([]);
+    setConflictMessage('');
+    onClose();
+  };
+
   return (
-    <Modal animationType="slide" transparent={true} visible={isVisible} onRequestClose={onClose}>
+    <Modal animationType="slide" transparent={true} visible={isVisible} onRequestClose={handleClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Join My School 🏫</Text>
-            <TouchableOpacity onPress={onClose}>
+            <Text style={styles.title}>
+                {step === 3 ? "Action Required ⚠️" : "Join My School 🏫"}
+            </Text>
+            <TouchableOpacity onPress={handleClose}>
               <Ionicons name="close" size={24} color="black" />
             </TouchableOpacity>
           </View>
@@ -163,7 +182,6 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
               {/* Class Selection */}
               <Text style={styles.label}>Select Your Class</Text>
               <FlatList
-                // FIX 2: Use available_classes to match API
                 data={schoolData?.available_classes || []}
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -179,7 +197,7 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
                 style={{ marginBottom: 20 }}
               />
 
-              {/* Subject Selection (Only shows after class selected) */}
+              {/* Subject Selection */}
               {selectedClass && (
                 <>
                   <Text style={styles.label}>Select Subjects ({selectedSubjects.length})</Text>
@@ -203,11 +221,45 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
                     />
                   )}
 
-                  <TouchableOpacity style={[styles.btnPrimary, { marginTop: 20 }]} onPress={submitJoin}>
+                  <TouchableOpacity style={[styles.btnPrimary, { marginTop: 20 }]} onPress={() => submitJoin(false)}>
                     <Text style={styles.btnText}>Complete Registration</Text>
                   </TouchableOpacity>
                 </>
               )}
+            </View>
+          )}
+
+          {/* STEP 3: CONFLICT UI (Already in a school) */}
+          {step === 3 && (
+            <View style={styles.conflictContainer}>
+              <View style={styles.warningIconWrapper}>
+                <Ionicons name="warning" size={40} color="#000" />
+              </View>
+              
+              <Text style={styles.conflictMessage}>{conflictMessage}</Text>
+              
+              <Text style={styles.conflictSubText}>
+                Leaving your current school will disconnect you from its classes and assignments.
+              </Text>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity 
+                  style={styles.btnSecondary} 
+                  onPress={handleClose}
+                >
+                  <Text style={[styles.btnText, {color: 'black'}]}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.btnDestructive} 
+                  onPress={() => {
+                    setStep(2); // Optionally go back to step 2 while loading
+                    submitJoin(true); // Force join
+                  }}
+                >
+                  <Text style={styles.btnText}>Leave & Join New</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -217,12 +269,12 @@ const JoinSchoolModal = ({ isVisible, onClose, onJoinSuccess }) => {
   );
 };
 
-// --- STYLES (Neo-Brutalist Lite) ---
+// --- STYLES (Neo-Brutalist) ---
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end', // Bottom Sheet style
+    justifyContent: 'flex-end', 
   },
   modalContent: {
     backgroundColor: 'white',
@@ -266,8 +318,37 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: '#F8F9FE',
   },
+  
+  // Buttons
   btnPrimary: {
     backgroundColor: '#864AF9',
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'black',
+    shadowColor: 'black',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  btnSecondary: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'black',
+    shadowColor: 'black',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    marginRight: 10,
+  },
+  btnDestructive: {
+    flex: 1.5,
+    backgroundColor: '#EF4444', // Red
     padding: 16,
     borderRadius: 10,
     alignItems: 'center',
@@ -283,7 +364,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  // Chip Styles (Class)
+
+  // Chips & Grid
   chip: {
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -294,7 +376,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   chipActive: {
-    backgroundColor: '#00E676', // Mint green
+    backgroundColor: '#00E676', 
   },
   chipText: {
     fontWeight: '700',
@@ -303,7 +385,6 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: 'black',
   },
-  // Subject Grid Styles
   subjectItem: {
     flex: 1,
     flexDirection: 'row',
@@ -319,6 +400,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#864AF9',
     borderColor: 'black',
   },
+
+  // Conflict UI Styles
+  conflictContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  warningIconWrapper: {
+    backgroundColor: '#FDE68A',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'black',
+    marginBottom: 20,
+    shadowColor: 'black',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  conflictMessage: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: 'black',
+    marginBottom: 10,
+  },
+  conflictSubText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 30,
+    paddingHorizontal: 10,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  }
 });
 
 export default JoinSchoolModal;

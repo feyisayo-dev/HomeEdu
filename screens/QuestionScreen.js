@@ -484,18 +484,31 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const {
+    // Standard params
     subtopicId,
     subtopic,
-    selectedSubjects,
+    selectedSubjects = [], // Default to empty array to prevent crashes
     type,
     subject,
     topic,
     examId,
+
+    // NEW: Teacher Exam Params (Sent from InstructionScreen)
+    title,
+    duration,
+    instructions = {}, // Default to empty object
+    userClass,
   } = route.params;
   const [unansweredModalVisible, setUnansweredModalVisible] = useState(false);
   const [unansweredQuestions, setUnansweredQuestions] = useState([]);
   const [startTime, setStartTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+
+  // ─── Countdown timer for school work (teacher-set duration) ───────────────
+  const hasCountdown = (type === 'schoolWork' || type === 'DistrictWork') && duration > 0;
+  const totalSeconds = duration * 60;
+  const [timeLeft, setTimeLeft] = useState(hasCountdown ? totalSeconds : null);
+  const timedOutRef = useRef(false);
   const [showNarrationExpanded, setShowNarrationExpanded] = useState(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -506,15 +519,41 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
 
-  // Timer effect
+  console.log("📥 RECEIVED in QuestionScreen \n", JSON.stringify({
+    type,
+    subtopicId,
+    subject,
+    title,
+    duration,
+    instructions,
+    userClass,
+    selectedSubjects,
+    subtopic,
+    topic,
+    examId
+  }, null, 2));
+  // Timer effect — countdown for school work, count-up otherwise
   useEffect(() => {
     const timer = setInterval(() => {
-      if (startTime && !isModalVisible) {
+      if (isModalVisible) return;
+
+      if (hasCountdown) {
+        setTimeLeft((prev) => {
+          if (prev <= 1 && !timedOutRef.current) {
+            timedOutRef.current = true;
+            clearInterval(timer);
+            // Auto-submit when time runs out
+            computeResults();
+            return 0;
+          }
+          return prev - 1;
+        });
+      } else if (startTime) {
         setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [startTime, isModalVisible]);
+  }, [startTime, isModalVisible, hasCountdown]);
 
   // Progress animation
   useEffect(() => {
@@ -682,6 +721,18 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
             console.log("Updated Payload for Subtopic Exam:", payload);
             break;
 
+          case "schoolWork":
+          case "DistrictWork":
+            console.log("Exam Type: School Work");
+            payload.subject = "School Work";
+            payload.topic = subject;
+            payload.subtopic = title;
+            payload.class = userClass
+            payload.subtopicId = subtopicId;
+            payload.total_questions = null;
+            break;
+
+
           default:
             console.log("Exam Type: Default");
             payload.total_questions = 10;
@@ -799,25 +850,34 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
     const selectedAnswer = userAnswers[currentId];
 
     if (!selectedAnswer) {
-      Alert.alert(
-        "Answer Required",
-        "Please select an answer before checking."
-      );
+      Alert.alert("Answer Required", "Please select an answer before continuing.");
       return;
     }
 
-    // --- UPDATE SUBMISSION STATE ---
+    if (instructions?.hide_answers) {
+      const isCorrect = selectedAnswer === currentQ.answer;
+      const updatedQuestions = [...questions];
+      updatedQuestions[currentIndex] = { ...currentQ, isCorrect };
+      setQuestions(updatedQuestions);
+      // No submittedIds — student can still go back and change answer
+      handleNextQuestion();
+      return;
+    }
+
+    // ─── Normal mode: lock the answer, mark correct/incorrect ─────────────────
     setSubmittedIds((prev) => ({ ...prev, [currentId]: true }));
 
     const isCorrect = selectedAnswer === currentQ.answer;
     const updatedQuestions = [...questions];
     updatedQuestions[currentIndex] = { ...currentQ, isCorrect };
     setQuestions(updatedQuestions);
+
     if (isCorrect) {
-      playMemeSound("correct"); // Triggers: "Correct Answer" meme
+      playMemeSound("correct");
     } else {
-      playMemeSound("wrong"); // Triggers: "Wrong Answer" meme
+      playMemeSound("wrong");
     }
+
     // Fetch narration if not already loaded
     if (!narrations[currentId]) {
       try {
@@ -899,24 +959,31 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const computeResults = () => {
     const correctAnswers = questions.filter((q) => q.isCorrect).length;
     const percentage = (correctAnswers / questions.length) * 100;
-    if (questions.length < 8) {
-      setShowThanksModal(true); // Show the modal
+
+    const timeTakenInSeconds = hasCountdown
+      ? totalSeconds - (timeLeft ?? 0)
+      : elapsedTime;
+    const pad = (num) => String(num).padStart(2, "0");
+    const timeTaken = `${pad(Math.floor(timeTakenInSeconds / 60))}:${pad(timeTakenInSeconds % 60)}`;
+
+    // School work always submits to portal regardless of question count
+    if (type === 'schoolWork') {
+      submitReport(timeTaken, percentage);
+    }
+
+    if (questions.length < 8 && type != 'schoolWork') {
+      setShowThanksModal(true);
       return;
     }
-    setResults({
-      correct: correctAnswers,
-      total: questions.length,
-      percentage,
-    });
+
+    setResults({ correct: correctAnswers, total: questions.length, percentage });
     setIsModalVisible(true);
 
-    const timeTakenInSeconds = elapsedTime;
-    const pad = (num) => String(num).padStart(2, "0");
-    const timeTaken = `${pad(Math.floor(timeTakenInSeconds / 60))}:${pad(
-      timeTakenInSeconds % 60
-    )}`;
+    // Non-school work submits here (school work already submitted above)
+    if (type !== 'schoolWork') {
+      submitReport(timeTaken, percentage);
+    }
 
-    submitReport(timeTaken, percentage);
     setPassed(percentage >= 70);
   };
 
@@ -934,10 +1001,16 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   };
 
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const s = Math.max(0, seconds);
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
+
+  // What the timer shows — countdown if school work, elapsed otherwise
+  const displayTime = hasCountdown ? timeLeft ?? totalSeconds : elapsedTime;
+  // Turn timer red in final 60 seconds of a countdown
+  const timerUrgent = hasCountdown && (timeLeft ?? totalSeconds) <= 60;
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -961,7 +1034,15 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
     <View style={styles.mainContainer}>
       {/* Header with Breadcrumb */}
       <View style={styles.header}>
-        <Breadcrumb currentQuestion={currentQuestion} />
+        <Breadcrumb
+          currentQuestion={{
+            ...currentQuestion,
+            class: userClass || currentQuestion?.class,
+            subject: subject || currentQuestion?.subject,
+            // If it's school work, use the Title, otherwise use the normal topic
+            topic: type === 'schoolWork' ? title : (topic || currentQuestion?.topic)
+          }}
+        />
 
         <View style={styles.headerTop}>
           <View style={styles.questionCounter}>
@@ -1003,9 +1084,9 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
             <Text style={{ fontSize: 16 }}>🧮</Text>
           </TouchableOpacity>
 
-          <View style={styles.timerContainer}>
-            <Text style={styles.timerIcon}>⏱️</Text>
-            <Text style={styles.timerText}>{formatTime(elapsedTime)}</Text>
+          <View style={[styles.timerContainer, timerUrgent && { backgroundColor: '#FFE5E5', borderColor: '#EF4444', borderWidth: 1, borderRadius: 8 }]}>
+            <Text style={styles.timerIcon}>{hasCountdown ? '⏳' : '⏱️'}</Text>
+            <Text style={[styles.timerText, timerUrgent && { color: '#EF4444', fontWeight: '900' }]}>{formatTime(displayTime)}</Text>
           </View>
         </View>
 
@@ -1071,72 +1152,81 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
                 style={styles.submitButton}
                 onPress={handleSubmit}
               >
-                <Text style={styles.submitButtonText}>Check Answer</Text>
+                <Text style={styles.submitButtonText}>
+                  {instructions?.hide_answers
+                    ? (currentIndex === questions.length - 1 ? 'Finish Exam' : 'Next Question →')
+                    : 'Check Answer'}
+                </Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.afterSubmitContainer}>
-                <TouchableOpacity
-                  style={styles.narrationToggle}
-                  onPress={() =>
-                    setShowNarrationExpanded(!showNarrationExpanded)
-                  }
-                >
-                  <Text style={styles.narrationToggleText}>
-                    {showNarrationExpanded ? "▼ Hide" : "▶ View"} Explanation
-                  </Text>
-                </TouchableOpacity>
 
-                {showNarrationExpanded && (
-                  <Animated.View
-                    style={[
-                      styles.narrationContainer,
-                      { opacity: narrationSlideAnim },
-                    ]}
-                  >
-                    <ScrollView
-                      style={styles.narrationScroll}
-                      nestedScrollEnabled={true}
-                      contentContainerStyle={{ paddingBottom: 20 }}
+                {/* 🆕 NEW: Only show explanation if the teacher allows it */}
+                {!instructions?.hide_answers && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.narrationToggle}
+                      onPress={() =>
+                        setShowNarrationExpanded(!showNarrationExpanded)
+                      }
                     >
-                      {narrations[currentQuestion.QuestionId]?.map(
-                        (item, idx) => {
-                          if (item.type === "text") {
-                            return (
-                              <View
-                                key={idx}
-                                style={styles.narrationTextWrapper}
-                              >
-                                {renderContentWithMath(
-                                  item.value,
-                                  styles.narrationText
-                                )}
-                              </View>
-                            );
-                          } else if (item.type === "image") {
-                            return (
-                              <Image
-                                key={idx}
-                                source={{ uri: item.value }}
-                                style={styles.narrationImage}
-                              />
-                            );
-                          } else if (item.type === "video") {
-                            return (
-                              <Video
-                                key={idx}
-                                source={{ uri: item.value }}
-                                style={styles.narrationVideo}
-                                useNativeControls
-                              />
-                            );
-                          }
-                          return null;
-                        }
-                      )}
-                    </ScrollView>
-                  </Animated.View>
-                )}
+                      <Text style={styles.narrationToggleText}>
+                        {showNarrationExpanded ? "▼ Hide" : "▶ View"} Explanation
+                      </Text>
+                    </TouchableOpacity>
 
+                    {showNarrationExpanded && (
+                      <Animated.View
+                        style={[
+                          styles.narrationContainer,
+                          { opacity: narrationSlideAnim },
+                        ]}
+                      >
+                        <ScrollView
+                          style={styles.narrationScroll}
+                          nestedScrollEnabled={true}
+                          contentContainerStyle={{ paddingBottom: 20 }}
+                        >
+                          {narrations[currentQuestion.QuestionId]?.map(
+                            (item, idx) => {
+                              if (item.type === "text") {
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={styles.narrationTextWrapper}
+                                  >
+                                    {renderContentWithMath(
+                                      item.value,
+                                      styles.narrationText
+                                    )}
+                                  </View>
+                                );
+                              } else if (item.type === "image") {
+                                return (
+                                  <Image
+                                    key={idx}
+                                    source={{ uri: item.value }}
+                                    style={styles.narrationImage}
+                                  />
+                                );
+                              } else if (item.type === "video") {
+                                return (
+                                  <Video
+                                    key={idx}
+                                    source={{ uri: item.value }}
+                                    style={styles.narrationVideo}
+                                    useNativeControls
+                                  />
+                                );
+                              }
+                              return null;
+                            }
+                          )}
+                        </ScrollView>
+                      </Animated.View>
+                    )}
+                  </>
+                )}
                 <TouchableOpacity
                   style={styles.nextButton}
                   onPress={handleNextQuestion}
@@ -1259,11 +1349,11 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
       </Modal>
 
       {/* --- CALCULATOR MODAL --- */}
-<CalculatorModal 
-  visible={calculatorVisible}
-  onClose={() => setCalculatorVisible(false)}
-  userClass={userData?.class} 
-/>
+      <CalculatorModal
+        visible={calculatorVisible}
+        onClose={() => setCalculatorVisible(false)}
+        userClass={userData?.class}
+      />
 
       <Modal
         transparent={true}

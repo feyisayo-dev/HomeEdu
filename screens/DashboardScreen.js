@@ -1172,12 +1172,12 @@ const DashboardContent = ({ route, navigation }) => {
               >
                 <Text style={styles.subjectsButtonText}>View All Subjects</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={[styles.subjectsButton, { marginTop: 16 }]}
                 onPress={() => navigation.navigate("Novel")}
               >
                 <Text style={styles.subjectsButtonText}>Read your Novels</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
               {/* <TouchableOpacity
                 style={[styles.subjectsButton, { marginTop: 16 }]}
                 onPress={() => navigation.navigate("Test")}

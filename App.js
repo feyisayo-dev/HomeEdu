@@ -21,7 +21,7 @@ import ExampleScreen from './screens/ExampleScreen';
 import ExamScreen from './screens/ExamScreen';
 import QuestionTestScreen from './screens/test_screen';
 import NovelScreen from './screens/NovelScreen';
-import PassageScreen from './screens/PassageScreen';
+import InstructionScreen from './screens/InstructionScreen';
 import ErrorBoundary from './screens/errors/indexScreen';
 
 // --- IMPORT MUSIC PROVIDER ---
@@ -79,8 +79,8 @@ const AppNavigator = () => {
         <Stack.Screen name="Question" component={QuestionScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Test" component={QuestionTestScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Novel" component={NovelScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Passage" component={PassageScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Exam" component={ExamScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Instruction" component={InstructionScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
