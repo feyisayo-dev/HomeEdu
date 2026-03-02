@@ -58,7 +58,6 @@ export const registerForPushNotifications = async () => {
   return true;
 };
 
-// --- 3. DYNAMIC STREAK NOTIFICATION (no cancel-all here) ---
 const _scheduleStreakNotification = async (streak, stars) => {
   const title = getMotivationMessage(streak);
   const body = getStarMessage(stars);
@@ -71,14 +70,13 @@ const _scheduleStreakNotification = async (streak, stars) => {
       color: '#864AF9',
     },
     trigger: {
-      hour: 18, // 6:00 PM Daily
+      hour: 18,
       minute: 0,
       repeats: true,
     },
   });
   console.log(`✅ Streak notification scheduled: "${title}"`);
 };
-
 // --- 4. WEEKLY CLASS REMINDERS (no cancel-all here) ---
 const _scheduleWeeklyClasses = async (subjects) => {
   if (!subjects || subjects.length === 0) return;
@@ -131,7 +129,6 @@ const _scheduleWeeklyClasses = async (subjects) => {
   }
 };
 
-// --- 5. MASTER RESCHEDULE (single entry point — cancels once, then schedules both) ---
 export const rescheduleAll = async (streak, stars, subjects) => {
   await Notifications.cancelAllScheduledNotificationsAsync();
   console.log('🗑️ All old notifications cleared.');
@@ -142,15 +139,12 @@ export const rescheduleAll = async (streak, stars, subjects) => {
   console.log('✅ All notifications rescheduled.');
 };
 
-// Convenience exports if you ever need to call them individually
-// (They still cancel-all to stay safe when called standalone)
+// ✅ UPDATED: These no longer cancel-all
 export const scheduleDynamicStreak = async (streak, stars) => {
-  await Notifications.cancelAllScheduledNotificationsAsync();
   await _scheduleStreakNotification(streak, stars);
 };
 
 export const scheduleWeeklyClasses = async (subjects) => {
-  await Notifications.cancelAllScheduledNotificationsAsync();
   await _scheduleWeeklyClasses(subjects);
 };
 

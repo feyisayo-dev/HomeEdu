@@ -46,9 +46,12 @@ export default function LoginScreen({ navigation }) {
     checkLoginStatus();
   }, []);
 
-  const handleLogin = async () => {
+const handleLogin = async () => {
     setLoading(true);
+    console.log("=== Login Attempt Started ===");
+
     try {
+      console.log("Sending credentials for:", email);
       const response = await axios.post(
         "https://homeedu.fsdgroup.com.ng/api/login",
         {
@@ -57,28 +60,47 @@ export default function LoginScreen({ navigation }) {
         }
       );
 
+      // 🔍 DIAGNOSTIC 1: What exactly did Laravel send back?
+      console.log("Login API Full Response Data:", response.data);
+
       if (response.data.userData) {
+        // Save User Data
         await AsyncStorage.setItem(
           "userData",
           JSON.stringify(response.data.userData)
         );
-        const token = response.data.accessToken;
-         await AsyncStorage.setItem('token', token);
+        console.log("✅ UserData saved to AsyncStorage");
+
+        // 🔍 DIAGNOSTIC 2: Check token extraction
+        // Added a fallback just in case your API uses 'token' instead of 'accessToken'
+        const token = response.data.accessToken || response.data.token;
+        console.log("Extracted Token to save:", token);
+
+        if (token) {
+          // Force it to be a string just to be absolutely safe
+          await AsyncStorage.setItem('token', String(token));
+          console.log("✅ Token successfully saved to AsyncStorage");
+        } else {
+          console.warn("⚠️ WARNING: Token is undefined! The API didn't return 'accessToken' or 'token'.");
+        }
+
         setUserData(response.data.userData);
         navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
       } else {
+        console.log("Login succeeded but no userData found in response.");
         Alert.alert("Success", response.data.message);
       }
     } catch (error) {
+      console.error("❌ Login API Error:", error.response?.data || error.message);
       Alert.alert(
         "Error",
         error.response?.data?.message || "Something went wrong"
       );
     } finally {
       setLoading(false);
+      console.log("=== Login Attempt Finished ===");
     }
   };
-
   // --- NEW: HANDLE FORGOT PASSWORD ---
   const handleForgotPassword = async () => {
     if (!resetEmail) {

@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import { useUser } from '../context/UserContext'; // Assuming you have this
+import { useUser } from '../context/UserContext';
 
 // ─── Availability Badge ────────────────────────────────────────────────────
 const AvailabilityBadge = ({ availability }) => {
@@ -41,7 +41,7 @@ const StatPill = ({ icon, label, value, accent }) => (
     </View>
 );
 const pillStyles = StyleSheet.create({
-    wrap: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, padding: 12, flex: 1, maxWidth: '33%', },
+    wrap: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, padding: 12, maxWidth: '33%' },
     iconBox: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     label: { fontSize: 10, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
     value: { fontSize: 15, color: '#0F172A', fontWeight: '900', marginTop: 1 },
@@ -62,44 +62,54 @@ const ruleStyles = StyleSheet.create({
     text: { flex: 1, fontSize: 14, color: '#475569', fontWeight: '500', lineHeight: 21 },
 });
 
+// ─── Date-aware availability resolver ─────────────────────────────────────
+// This is the fix: we compute availability from the actual dates on the device,
+// so a closed exam stays closed even if the server field is stale or missing.
+const resolveAvailability = (serverAvailability, openDate, closeDate) => {
+    const now = Date.now();
+
+    if (closeDate && now > new Date(closeDate).getTime()) return 'closed';
+    if (openDate && now < new Date(openDate).getTime()) return 'upcoming';
+
+    // Both date checks passed (or dates aren't set) — trust the server value
+    return serverAvailability ?? 'open';
+};
+
 // ─── Main Screen ───────────────────────────────────────────────────────────
 const InstructionScreen = ({ route, navigation }) => {
     const {
         type, subtopicId, subject, title,
         duration, instructions, userClass,
-        teacherName, openDate, closeDate, availability,
+        teacherName, openDate, closeDate,
+        availability: serverAvailability,   // renamed so we don't shadow our resolved value
     } = route.params;
 
     const { userData } = useUser();
 
-    // Attempt tracking state
     const [attemptsCount, setAttemptsCount] = useState(0);
     const [loadingAttempts, setLoadingAttempts] = useState(true);
 
-    // Parse instructions safely
-    let parsed = { text: '', hide_answers: false, maxAttempt: 1 };
+    // ── Resolve actual availability from dates first, server field second ──
+    const availability = resolveAvailability(serverAvailability, openDate, closeDate);
 
+    // ── Parse instructions safely ──────────────────────────────────────────
+    let parsed = { text: '', hide_answers: false, maxAttempt: 1 };
     if (instructions) {
         if (typeof instructions === 'object') {
-            // It's already an object, just merge it
             parsed = { ...parsed, ...instructions };
         } else if (typeof instructions === 'string') {
             try {
-                // Try to parse it if it's a valid JSON string
-                const jsonParsed = JSON.parse(instructions);
-                parsed = { ...parsed, ...jsonParsed };
-            } catch (e) {
-                console.warn("Could not parse instructions as JSON. Using defaults.", instructions);
-                // If it's just raw text that isn't JSON, maybe the teacher just typed a note
+                parsed = { ...parsed, ...JSON.parse(instructions) };
+            } catch {
                 parsed.text = instructions;
             }
         }
     }
-    // Parse maximum attempts (Fallback to 0 if unlimited)
+
     const maxAttempts = parseInt(parsed.max_attempts) || parseInt(parsed.maxAttempt) || 0;
     const isUnlimited = maxAttempts === 0;
 
-    // Slide-up animation
+    // ── Animations ─────────────────────────────────────────────────────────
     const slideAnim = useRef(new Animated.Value(60)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -109,23 +119,18 @@ const InstructionScreen = ({ route, navigation }) => {
             Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
         ]).start();
 
-        // Fetch User Attempts
         const fetchAttempts = async () => {
-            if (!userData?.username) {
-                setLoadingAttempts(false);
-                return;
-            }
+            if (!userData?.username) { setLoadingAttempts(false); return; }
             try {
-                const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`);
+                const response = await axios.get(
+                    `https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`
+                );
                 if (response.data.status === 200) {
-                    console.log(response.data);
-                    const pastAttempts = response.data.data.filter(
-                        (report) => report.SubtopicId === subtopicId
-                    );
-                    setAttemptsCount(pastAttempts.length);
+                    const past = response.data.data.filter(r => r.SubtopicId === subtopicId);
+                    setAttemptsCount(past.length);
                 }
             } catch (err) {
-                console.log("Could not fetch past attempts", err);
+                console.log('Could not fetch past attempts', err);
             } finally {
                 setLoadingAttempts(false);
             }
@@ -134,23 +139,25 @@ const InstructionScreen = ({ route, navigation }) => {
         fetchAttempts();
     }, [userData, subtopicId]);
 
-    // Logic Gates
-    const isTimeOpen = availability === 'open' || !availability;
+    // ── Gate logic ─────────────────────────────────────────────────────────
     const isAttemptsExhausted = !isUnlimited && attemptsCount >= maxAttempts;
+    const canStart = availability === 'open' && !isAttemptsExhausted;
 
-    // The final check to see if the button should be green/purple or locked
-    const canStart = isTimeOpen && !isAttemptsExhausted;
+    // Human-readable reason why the button is locked
+    const lockedReason = (() => {
+        if (isAttemptsExhausted) return 'Max Attempts Reached';
+        if (availability === 'upcoming') return 'Not Open Yet';
+        if (availability === 'closed') return 'Exam Closed';
+        return 'Unavailable';
+    })();
 
     const handleStart = () => {
         if (!canStart || loadingAttempts) return;
-
-        const payload = {
+        navigation.replace('Question', {
             type, subtopicId, subject, title, duration,
             instructions: parsed, userClass,
             selectedSubjects: [], subtopic: null, topic: null, examId: null,
-        };
-
-        navigation.replace('Question', payload);
+        });
     };
 
     const fmtDate = (str) => {
@@ -183,10 +190,10 @@ const InstructionScreen = ({ route, navigation }) => {
                             <View style={[s.subjectBadge, { maxWidth: 160 }]}>
                                 <Text style={s.subjectText} numberOfLines={1} ellipsizeMode="tail">{subject}</Text>
                             </View>
-                            <AvailabilityBadge availability={availability ?? 'open'} />
+                            <AvailabilityBadge availability={availability} />
                         </View>
 
-<Text style={s.examTitle} numberOfLines={2} ellipsizeMode="tail">{title}</Text>
+                        <Text style={s.examTitle} numberOfLines={2} ellipsizeMode="tail">{title}</Text>
 
                         {teacherName && (
                             <View style={s.teacherRow}>
@@ -200,20 +207,19 @@ const InstructionScreen = ({ route, navigation }) => {
                             </View>
                         )}
 
-                        {/* Stats Row (Now includes Attempts!) */}
                         <View style={s.statsRow}>
-                            <StatPill icon="time-outline" label="Duration" value={`${duration}m`} accent="#6D28D9" />
+                            <StatPill icon="time-outline" label="Duration" value={duration ? `${duration}m` : 'Untimed'} accent="#6D28D9" />
                             <StatPill icon="people-outline" label="Class" value={userClass} accent="#0EA5E9" />
                             <StatPill
                                 icon="repeat-outline"
                                 label="Attempts"
                                 value={isUnlimited ? '∞' : `${attemptsCount}/${maxAttempts}`}
-                                accent={isAttemptsExhausted ? "#EF4444" : "#10B981"}
+                                accent={isAttemptsExhausted ? '#EF4444' : '#10B981'}
                             />
                         </View>
                     </View>
 
-                    {/* ── Window Card ── */}
+                    {/* ── Exam Window ── */}
                     {(openDate || closeDate) && (
                         <View style={s.windowCard}>
                             <View style={s.windowHeader}>
@@ -234,7 +240,7 @@ const InstructionScreen = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    {/* ── Teacher Instructions ── */}
+                    {/* ── Teacher's Note ── */}
                     <View style={s.instructionCard}>
                         <View style={s.windowHeader}>
                             <Text style={{ fontSize: 18 }}>📝</Text>
@@ -253,22 +259,25 @@ const InstructionScreen = ({ route, navigation }) => {
                             <Ionicons name="shield-checkmark-outline" size={18} color="#6D28D9" />
                             <Text style={s.sectionTitle}>Rules & Settings</Text>
                         </View>
-
                         <RuleRow
                             icon={parsed.hide_answers ? 'eye-off-outline' : 'eye-outline'}
                             iconColor={parsed.hide_answers ? '#EF4444' : '#10B981'}
-                            text={
-                                parsed.hide_answers
-                                    ? 'Answers and corrections will be hidden after submission — set by your teacher.'
-                                    : 'You can review your corrections and score after submitting.'
-                            }
+                            text={parsed.hide_answers
+                                ? 'Answers and corrections will be hidden after submission — set by your teacher.'
+                                : 'You can review your corrections and score after submitting.'}
                         />
                         <RuleRow
                             icon="repeat-outline"
                             iconColor="#0EA5E9"
-                            text={isUnlimited ? "You can retake this exam as many times as you want." : `You are allowed a maximum of ${maxAttempts} attempt(s) for this exam.`}
+                            text={isUnlimited
+                                ? 'You can retake this exam as many times as you want.'
+                                : `You are allowed a maximum of ${maxAttempts} attempt(s) for this exam.`}
                         />
-                        <RuleRow icon="calculator-outline" iconColor="#6D28D9" text="In-app calculator and scratch pad are available during the exam." />
+                        <RuleRow
+                            icon="calculator-outline"
+                            iconColor="#6D28D9"
+                            text="In-app calculator and scratch pad are available during the exam."
+                        />
                     </View>
 
                     <View style={{ height: 20 }} />
@@ -293,9 +302,7 @@ const InstructionScreen = ({ route, navigation }) => {
                     ) : (
                         <>
                             <Ionicons name="lock-closed-outline" size={20} color="#94A3B8" />
-                            <Text style={[s.startBtnText, { color: '#94A3B8' }]}>
-                                {isAttemptsExhausted ? 'Max Attempts Reached' : (availability === 'upcoming' ? 'Not Open Yet' : 'Exam Closed')}
-                            </Text>
+                            <Text style={[s.startBtnText, { color: '#94A3B8' }]}>{lockedReason}</Text>
                         </>
                     )}
                 </TouchableOpacity>
@@ -319,6 +326,7 @@ const s = StyleSheet.create({
     subjectBadge: { backgroundColor: '#6D28D9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
     subjectText: { color: '#fff', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
     examTitle: { fontSize: 22, fontWeight: '900', color: '#0F172A', lineHeight: 30, marginBottom: 16 },
+    statsRow: { flexDirection: 'row', gap: 8, overflow: 'hidden' },
 
     // Teacher
     teacherRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18, backgroundColor: '#F8F7FF', padding: 10, borderRadius: 12 },
@@ -326,8 +334,6 @@ const s = StyleSheet.create({
     avatarText: { color: '#fff', fontWeight: '900', fontSize: 16 },
     teacherLabel: { fontSize: 10, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase' },
     teacherName: { fontSize: 14, color: '#0F172A', fontWeight: '800' },
-
-statsRow: { flexDirection: 'row', gap: 8, overflow: 'hidden' },
 
     // Window
     windowCard: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: '#6D28D9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
@@ -348,11 +354,7 @@ statsRow: { flexDirection: 'row', gap: 8, overflow: 'hidden' },
 
     // Footer
     footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#EDE9FE' },
-    startBtn: {
-        backgroundColor: '#6D28D9', flexDirection: 'row', alignItems: 'center',
-        justifyContent: 'center', padding: 17, borderRadius: 16, gap: 10,
-        shadowColor: '#6D28D9', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
-    },
+    startBtn: { backgroundColor: '#6D28D9', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 17, borderRadius: 16, gap: 10, shadowColor: '#6D28D9', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
     startBtnDisabled: { backgroundColor: '#F1F5F9', shadowOpacity: 0, elevation: 0 },
     startBtnText: { color: '#fff', fontSize: 17, fontWeight: '900', letterSpacing: 0.5 },
 });

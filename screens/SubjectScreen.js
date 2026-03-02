@@ -101,13 +101,27 @@ const SubjectScreen = ({ navigation }) => {
 
   // ── Navigation Handlers ──────────────────────────────────────────────────
   const handleButtonPress = () => {
-    navigation.navigate('Exam', {
+    console.log("Navigating to Exam with params:", {
       type: 'classExam',
-      subject: null,
-      topic: null,
-      subtopic: null,
-      userClass: userData.class,
+      class: userData.class,
     });
+    if (userData.class === "JAMB") {
+      navigation.navigate('Exam', {
+        type: 'JAMB',
+        subject: null,
+        topic: null,
+        subtopic: null,
+        userClass: userData.class,
+      });
+    } else {
+      navigation.navigate('Exam', {
+        type: 'classExam',
+        subject: null,
+        topic: null,
+        subtopic: null,
+        userClass: userData.class,
+      });
+    }
   };
 
   const startSchoolWork = (work) => {
@@ -144,12 +158,12 @@ const SubjectScreen = ({ navigation }) => {
         <View style={[
           styles.statusBadge,
           item.availability === 'upcoming' ? styles.statusUpcoming :
-          item.availability === 'closed' ? styles.statusClosed : styles.statusOpen
+            item.availability === 'closed' ? styles.statusClosed : styles.statusOpen
         ]}>
           <Text style={[
             styles.statusText,
             item.availability === 'upcoming' ? { color: '#D97706' } :
-            item.availability === 'closed' ? { color: '#64748B' } : { color: '#065F46' }
+              item.availability === 'closed' ? { color: '#64748B' } : { color: '#065F46' }
           ]}>
             {item.availability === 'open' ? 'Active' : item.availability}
           </Text>

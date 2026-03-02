@@ -2,7 +2,7 @@
   "expo": {
     "name": "Home Edu",
     "slug": "home-edu",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -30,7 +30,7 @@
     "web": {
       "favicon": "./assets/icon_favicon.png"
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.1.0",
     "plugins": [
       "expo-video",
       "expo-font",

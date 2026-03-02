@@ -1,7 +1,7 @@
 import React from 'react';
-import { FlexWidget, TextWidget, ImageWidget } from 'react-native-android-widget';
+import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
-export function StatsWidget({ streaks, stars }) {
+export function StatsWidget({ streaks = 0, stars = 0 }) {
   return (
     <FlexWidget
       style={{
@@ -13,9 +13,10 @@ export function StatsWidget({ streaks, stars }) {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 16,
-        borderWidth: 4,     // Neo-Brutalist Border
+        borderWidth: 4,
         borderColor: '#000000',
       }}
+      clickAction="OPEN_APP"
     >
       {/* LEFT: STREAKS */}
       <FlexWidget style={{ alignItems: 'center', flexDirection: 'row' }}>

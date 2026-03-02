@@ -28,6 +28,8 @@ import { WebView } from "react-native-webview";
 import Svg, { Path } from "react-native-svg";
 import { BackgroundMusicContext } from "../context/BackgroundMusicProvider";
 import CalculatorModal from '../components/CalculatorModal';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { updateStatsWidget } from '../src/utils/widgetHelper';
 const Breadcrumb = memo(
   ({ currentQuestion }) => {
     if (!currentQuestion) return null;
@@ -378,38 +380,105 @@ const renderContentWithMath = (content, textStyle = {}) => {
 const RoughSheet = ({ visible, onClose }) => {
   const [paths, setPaths] = useState([]);
   const [currentPath, setCurrentPath] = useState("");
-  const isDrawing = useRef(false);
+  const [isDrawing, setIsDrawing] = useState(false);
 
-  const handleTouchStart = (e) => {
-    const { locationX, locationY } = e.nativeEvent;
-    isDrawing.current = true;
-    const newPath = `M${locationX},${locationY}`;
-    console.log("🖊️ Touch Start:", newPath);
-    setCurrentPath(newPath);
+  console.log('🎨 RoughSheet render:', {
+    visible,
+    pathCount: paths.length,
+    isDrawing,
+    currentPathLength: currentPath.length
+  });
+
+  const handleTouchStart = (evt) => {
+    console.log('👆 handleTouchStart called');
+    try {
+      evt.stopPropagation();
+      const { locationX, locationY } = evt.nativeEvent;
+      console.log('📍 Touch start location:', { locationX, locationY });
+      setIsDrawing(true);
+      const newPath = `M${locationX},${locationY}`;
+      console.log('✏️ Starting new path:', newPath);
+      setCurrentPath(newPath);
+    } catch (error) {
+      console.error('❌ Error in handleTouchStart:', error);
+    }
   };
 
-  const handleTouchMove = (e) => {
-    if (!isDrawing.current) return;
-    const { locationX, locationY } = e.nativeEvent;
-    setCurrentPath((prev) => `${prev} L${locationX},${locationY}`);
+  const handleTouchMove = (evt) => {
+    try {
+      evt.stopPropagation();
+      if (!isDrawing) return;
+      const { locationX, locationY } = evt.nativeEvent;
+      setCurrentPath((prev) => `${prev} L${locationX},${locationY}`);
+    } catch (error) {
+      console.error('❌ Error in handleTouchMove:', error);
+    }
   };
 
-  const handleTouchEnd = () => {
-    console.log("✅ Touch End");
-    isDrawing.current = false;
-    if (currentPath) {
-      console.log("💾 Saving path. Total will be:", paths.length + 1);
-      setPaths((prev) => [...prev, currentPath]);
+  const handleTouchEnd = (evt) => {
+    console.log('🛑 handleTouchEnd called');
+    try {
+      evt.stopPropagation();
+      if (currentPath && isDrawing) {
+        setPaths((prevPaths) => {
+          const newPaths = [...prevPaths, currentPath];
+          console.log('💾 Saved path, total paths now:', newPaths.length);
+          return newPaths;
+        });
+      }
       setCurrentPath("");
+      setIsDrawing(false);
+    } catch (error) {
+      console.error('❌ Error in handleTouchEnd:', error);
     }
   };
 
   const handleClear = () => {
+    console.log('🗑️ Clearing all paths');
     setPaths([]);
     setCurrentPath("");
   };
 
   if (!visible) return null;
+
+  // Wrap SVG rendering in try-catch
+  const renderSvgPaths = () => {
+    try {
+      return (
+        <Svg
+          width="100%"
+          height="100%"
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        >
+          {paths.map((pathData, index) => (
+            <Path
+              key={`path-${index}`}
+              d={pathData}
+              stroke="#000"
+              strokeWidth={3}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {currentPath !== "" && (
+            <Path
+              d={currentPath}
+              stroke="#000"
+              strokeWidth={3}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+        </Svg>
+      );
+    } catch (error) {
+      console.error('❌ Error rendering SVG:', error);
+      return <Text style={{ color: 'red' }}>SVG Render Error</Text>;
+    }
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
@@ -426,43 +495,23 @@ const RoughSheet = ({ visible, onClose }) => {
           </View>
         </View>
 
+        {/* Canvas wrapper that captures touches */}
         <View
           style={styles.rsCanvas}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={handleTouchStart}
+          onResponderMove={handleTouchMove}
+          onResponderRelease={handleTouchEnd}
+          onResponderTerminate={handleTouchEnd}
         >
-          <Svg style={StyleSheet.absoluteFill}>
-            {paths.map((pathData, index) => (
-              <Path
-                key={`path-${index}`}
-                d={pathData}
-                stroke="#000"
-                strokeWidth={3}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ))}
-
-            {currentPath !== "" && (
-              <Path
-                d={currentPath}
-                stroke="#000"
-                strokeWidth={3}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-          </Svg>
+          {renderSvgPaths()}
         </View>
       </View>
     </Modal>
   );
 };
-
+const UserContext = createContext();
 const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [roughSheetVisible, setRoughSheetVisible] = useState(false);
@@ -481,7 +530,8 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [results, setResults] = useState(null);
   const [calculatorVisible, setCalculatorVisible] = useState(false);
   const [calcInput, setCalcInput] = useState("");
-
+  const [streaks, setStreaks] = useState(0);
+  const [stars, setStars] = useState(0);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const {
     // Standard params
@@ -519,20 +569,21 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
 
-  console.log("📥 RECEIVED in QuestionScreen \n", JSON.stringify({
-    type,
-    subtopicId,
-    subject,
-    title,
-    duration,
-    instructions,
-    userClass,
-    selectedSubjects,
-    subtopic,
-    topic,
-    examId
-  }, null, 2));
+  // console.log("📥 RECEIVED in QuestionScreen \n", JSON.stringify({
+  //   type,
+  //   subtopicId,
+  //   subject,
+  //   title,
+  //   duration,
+  //   instructions,
+  //   userClass,
+  //   selectedSubjects,
+  //   subtopic,
+  //   topic,
+  //   examId
+  // }, null, 2));
   // Timer effect — countdown for school work, count-up otherwise
+
   useEffect(() => {
     const timer = setInterval(() => {
       if (isModalVisible) return;
@@ -683,7 +734,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
             console.log("Exam Type: JAMB");
             if (selectedSubjects.length > 0) {
               payload.JAMB_SUBJECT = selectedSubjects.join(",");
-              payload.total_questions = 200;
+              payload.total_questions = null;
               console.log("Updated Payload for JAMB:", payload);
             }
             break;
@@ -739,15 +790,33 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
             console.log("Updated Payload for Default:", payload);
         }
 
-        // Step 4: Make API request
-        console.log("Sending API Request with Payload:", payload);
+        // ==========================================
+        // 🔐 STEP 4: FETCH TOKEN & MAKE API REQUEST
+        // ==========================================
+
+        // Retrieve the token from AsyncStorage
+        const token = await AsyncStorage.getItem('token');
+
+        // Clean the token just in case it was saved with stringified quotes
+        const cleanToken = token ? token.replace(/"/g, '') : '';
+
+        console.log("Sending API Request with Payload:", payload, "and token", cleanToken);
+
+        // Add the config object with headers as the third argument in axios.post
         const response = await axios.post(
           `https://homeedu.fsdgroup.com.ng/api/ExamQuestions`,
-          payload
+          payload,
+          {
+            headers: {
+              'Authorization': `Bearer ${cleanToken}`,
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          }
         );
 
         // Step 5: Log raw response
-        console.log("Fetched Questions Response:", response.data);
+        // console.log("Fetched Questions Response:", response.data);
 
         // Step 6: Parse questions
         const apiData = response.data.data || [];
@@ -790,6 +859,13 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
         console.log("Questions state updated successfully.");
       } catch (error) {
         console.error("❌ Error fetching questions:", error);
+
+        // Optional: Handle 401 Unauthorized specifically
+        if (error.response && error.response.status === 401) {
+          console.log("Token expired or invalid. User needs to re-login.");
+          // You might want to trigger a logout function here
+        }
+
         setQuestions([]);
       } finally {
         setLoading(false);
@@ -917,21 +993,71 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
       handleFinalSubmit();
     }
   };
+  const fetchStreaks = async () => {
+    try {
+      if (!userData?.username) return;
+      const response = await axios.get(
+        `https://homeedu.fsdgroup.com.ng/api/streaks?username=${userData.username}`
+      );
+      const streakCount = response.data.streak_count || 0;
+      setStreaks(streakCount);
+      return streakCount;
+    } catch (error) {
+      console.error("Error fetching streaks:", error);
+      return 0;
+    }
+  };
+
+  // Fetch and store stars
+  const fetchStars = async () => {
+    try {
+      if (!userData?.username) return;
+      const formData = new FormData();
+      formData.append("class", userData?.class);
+
+      const response = await fetch(
+        `https://homeedu.fsdgroup.com.ng/api/getleaderboard/${userData?.username}`,
+        { method: "POST", body: formData }
+      );
+
+      const json = await response.json();
+      if (json.status === 200) {
+        const currentUser = json.data.find(user => user.username === userData?.username);
+        const starCount = currentUser?.stars || currentUser?.total_stars || 0;
+        setStars(starCount);
+        return starCount;
+      }
+      return 0;
+    } catch (error) {
+      console.error("Error fetching stars:", error);
+      return 0;
+    }
+  };
+
+  // Auto-update widget when streaks or stars change
+  useEffect(() => {
+    if (streaks !== undefined && stars !== undefined) {
+      updateStatsWidget(streaks, stars);
+    }
+  }, [streaks, stars]);
+
+  // Refresh stats (call after exam completion)
+  const refreshStats = async () => {
+    const newStreaks = await fetchStreaks();
+    const newStars = await fetchStars();
+    return { streaks: newStreaks, stars: newStars };
+  };
 
   const submitReport = async (time_taken, percentage) => {
     let subjectCodes = null;
     let examTitle = null;
 
     if (selectedSubjects && selectedSubjects.length > 0) {
-      const prefix = selectedSubjects[0].slice(0, 3).toUpperCase();
-      const randomCode = Math.random()
-        .toString(36)
-        .substring(2, 6)
-        .toUpperCase();
       subjectCodes = selectedSubjects
         .map((s) => s.slice(0, 3).toUpperCase())
         .join("");
-      examTitle = `${selectedSubjects.join(" ")} for ${userData.class}`;
+
+      examTitle = `${selectedSubjects.join(", ")} for ${userData.class}`;
     }
 
     const reportData = {
@@ -946,13 +1072,24 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
     };
 
     try {
-      await fetch("https://homeedu.fsdgroup.com.ng/api/ExamReport", {
+      const response = await fetch("https://homeedu.fsdgroup.com.ng/api/ExamReport", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(reportData),
       });
+
+      const data = await response.json();
+
+      if (response.ok || data.status === 200) {
+        console.log('✅ Report submitted successfully');
+
+        // 🎯 ADD THIS LINE - Refresh stats and update widget
+        await refreshStats();
+      } else {
+        console.error('❌ Report submission failed:', data);
+      }
     } catch (error) {
-      console.error("Error submitting report:", error);
+      console.error("❌ Error submitting report:", error);
     }
   };
 

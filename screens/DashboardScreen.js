@@ -33,6 +33,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import JoinSchoolModal from '../components/JoinMySchool';
 import ParentEmailCheck from '../components/ParentModal';
 const { width } = Dimensions.get("window");
+import { updateStatsWidget } from '../src/utils/widgetHelper';
 
 const InputField = ({ label, value, onChange, isEditing, onToggle, keyboardType = 'default' }) => (
   <View style={styles.inputGroup}>
@@ -73,6 +74,7 @@ const DashboardContent = ({ route, navigation }) => {
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const [streaks, setStreaks] = useState(0);
+  const [userStars, setUserStars] = useState(0);
   const [reports, setReports] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -185,41 +187,24 @@ const DashboardContent = ({ route, navigation }) => {
     }
   };
 
-  const updateHomeWidget = async (streakCount, starCount) => {
-    try {
-      await requestWidgetUpdate({
-        widgetName: 'StatsWidget',
-        renderWidget: () => <StatsWidget streaks={streakCount} stars={starCount} />,
-        widgetInfo: {
-          minWidth: 320,
-          minHeight: 100,
-          targetCellWidth: 4,
-          targetCellHeight: 1,
-        }
-      });
-      console.log("📱 Widget Updated");
-    } catch (error) {
-      console.log("Widget Error (Ignore if in Expo Go):", error);
+
+useEffect(() => {
+  const setupServices = async () => {
+    if (!userData) return;
+
+    const hasPermission = await NotificationService.registerForPushNotifications();
+
+    if (hasPermission) {
+      // ✅ Use the master reschedule function to avoid conflicts
+      await NotificationService.rescheduleAll(streaks, stars, subjects);
     }
+    
+    // ✅ Update widget with correct values
+    await updateStatsWidget(streaks, stars);
   };
 
-  // --- NOTIFICATIONS & WIDGET SETUP ---
-  useEffect(() => {
-    const setupServices = async () => {
-      if (!userData) return;
-
-      const hasPermission = await NotificationService.registerForPushNotifications();
-
-      if (hasPermission) {
-        await NotificationService.scheduleDynamicStreak(streaks, userData.stars || 0);
-        await NotificationService.scheduleWeeklyClasses(subjects);
-      }
-      await updateHomeWidget(streaks, userData.stars);
-    };
-
-    setupServices();
-  }, [userData, streaks, subjects]);
-
+  setupServices();
+}, [userData, streaks, stars, subjects]); // ✅ Added stars dependency
   // Tutorial startup logic
   useEffect(() => {
     const runTutorial = async () => {
@@ -307,23 +292,28 @@ const DashboardContent = ({ route, navigation }) => {
     }
   }, [userData?.username]);
 
-  useFocusEffect(
-    useCallback(() => {
-      const fetchStreaks = async () => {
-        try {
-          if (!userData) return;
-          const id = userData?.username;
-          const response = await axios.get(
-            `https://homeedu.fsdgroup.com.ng/api/streaks?username=${id}`
-          );
-          setStreaks(response.data.streak_count);
-        } catch (error) {
-          console.error("Error fetching streaks:", error);
-        }
-      };
-      fetchStreaks();
-    }, [userData])
-  );
+useFocusEffect(
+  useCallback(() => {
+    const fetchStreaks = async () => {
+      try {
+        if (!userData) return;
+        const id = userData?.username;
+        const response = await axios.get(
+          `https://homeedu.fsdgroup.com.ng/api/streaks?username=${id}`
+        );
+        const streakCount = response.data.streak_count || 0;
+        setStreaks(streakCount);
+        
+        // Update widget with new streak count
+        await updateStatsWidget(streakCount, userStars);
+      } catch (error) {
+        console.error("Error fetching streaks:", error);
+      }
+    };
+    fetchStreaks();
+  }, [userData, userStars]) // Add userStars as dependency
+);
+
 
   const checkExistingDownloads = async (packs) => {
     const loadedIds = [];
@@ -543,28 +533,36 @@ const DashboardContent = ({ route, navigation }) => {
     }
   };
 
-  const fetchLeaderboard = async () => {
-    try {
-      const formData = new FormData();
-      formData.append("class", userData?.class);
+const fetchLeaderboard = async () => {
+  try {
+    const formData = new FormData();
+    formData.append("class", userData?.class);
 
-      const response = await fetch(
-        `https://homeedu.fsdgroup.com.ng/api/getleaderboard/${userData?.username}`,
-        { method: "POST", body: formData }
-      );
+    const response = await fetch(
+      `https://homeedu.fsdgroup.com.ng/api/getleaderboard/${userData?.username}`,
+      { method: "POST", body: formData }
+    );
 
-      const json = await response.json();
-      if (json.status === 200) {
-        setLeaderboard(json.data);
-      } else {
-        setLeaderboard([]);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
+    const json = await response.json();
+    if (json.status === 200) {
+      setLeaderboard(json.data);
+      
+      // Extract current user's stars from leaderboard
+      const currentUser = json.data.find(user => user.username === userData?.username);
+      const stars = currentUser?.stars || currentUser?.total_stars || 0;
+      setUserStars(stars);
+      
+      // Update widget with new star count
+      await updateStatsWidget(streaks, stars);
+    } else {
+      setLeaderboard([]);
     }
-  };
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const truncateText = (text, max = 18) => {
     if (!text) return null;
@@ -853,31 +851,52 @@ const DashboardContent = ({ route, navigation }) => {
   ], []);
 
   // ✅ MOVED THESE UP BEFORE THE `if (!userData)` CHECK
-  useEffect(() => {
-    const loadTimetable = async () => {
-      try {
-        const saved = await AsyncStorage.getItem('customTimetable');
-        const classTimes = generateClassTimes();
+useEffect(() => {
+  const loadTimetable = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('customTimetable');
+      const classTimes = generateClassTimes();
 
-        if (saved) {
-          setTimetableData(JSON.parse(saved));
-        } else if (subjects && subjects.length > 0) {
-          const defaultData = subjects.slice(0, 3).map((sub, index) => ({
-            time: classTimes[index] || "00:00",
-            subject: sub.Subject
-          }));
-          setTimetableData(defaultData);
-        } else {
-          const emptyData = classTimes.map(time => ({ time, subject: "Free Period" }));
-          setTimetableData(emptyData);
+      if (saved) {
+        const parsedData = JSON.parse(saved);
+        
+        // Validate saved data isn't empty/corrupted
+        if (parsedData && parsedData.length > 0) {
+          setTimetableData(parsedData);
+          return; // Exit early if we have valid saved data
         }
-      } catch (e) {
-        console.error("Error loading timetable", e);
       }
-    };
 
-    loadTimetable();
-  }, [subjects]);
+      // If no saved data or invalid, generate from subjects
+      if (subjects && subjects.length > 0) {
+        const defaultData = subjects.slice(0, 3).map((sub, index) => ({
+          time: classTimes[index] || "00:00",
+          subject: sub?.Subject || "Free Period" // Add null safety
+        }));
+        setTimetableData(defaultData);
+      } else {
+        // Fallback to empty timetable
+        const emptyData = classTimes.slice(0, 3).map(time => ({ 
+          time, 
+          subject: "Free Period" 
+        }));
+        setTimetableData(emptyData);
+      }
+    } catch (e) {
+      console.error("❌ Error loading timetable:", e);
+      
+      // Fallback to safe default on error
+      const classTimes = generateClassTimes();
+      const safeDefault = classTimes.slice(0, 3).map(time => ({ 
+        time, 
+        subject: "Free Period" 
+      }));
+      setTimetableData(safeDefault);
+    }
+  };
+
+  loadTimetable();
+}, [subjects]); // This might cause issues if subjects is recreated
 
   const openTimetableEditor = () => {
     setTempTimetable(JSON.parse(JSON.stringify(timetableData)));

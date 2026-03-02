@@ -17,93 +17,43 @@ import Checkbox from 'expo-checkbox';
 
 const { width } = Dimensions.get('window');
 
-// Animated Subject Item Component
+// ─── Animated Subject Item ─────────────────────────────────────────────────
 const AnimatedSubjectItem = ({ item, index, isSelected, onPress, type }) => {
     const scaleAnim = useRef(new Animated.Value(0)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const checkboxScale = useRef(new Animated.Value(1)).current;
 
-    // Entrance animation
     React.useEffect(() => {
         Animated.parallel([
-            Animated.spring(scaleAnim, {
-                toValue: 1,
-                delay: index * 80,
-                tension: 50,
-                friction: 7,
-                useNativeDriver: true,
-            }),
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                delay: index * 80,
-                duration: 400,
-                useNativeDriver: true,
-            }),
+            Animated.spring(scaleAnim, { toValue: 1, delay: index * 80, tension: 50, friction: 7, useNativeDriver: true }),
+            Animated.timing(fadeAnim, { toValue: 1, delay: index * 80, duration: 400, useNativeDriver: true }),
         ]).start();
     }, []);
 
-    // Checkbox animation when selected
     React.useEffect(() => {
         if (isSelected) {
             Animated.sequence([
-                Animated.spring(checkboxScale, {
-                    toValue: 1.3,
-                    tension: 100,
-                    friction: 3,
-                    useNativeDriver: true,
-                }),
-                Animated.spring(checkboxScale, {
-                    toValue: 1,
-                    tension: 100,
-                    friction: 5,
-                    useNativeDriver: true,
-                }),
+                Animated.spring(checkboxScale, { toValue: 1.3, tension: 100, friction: 3, useNativeDriver: true }),
+                Animated.spring(checkboxScale, { toValue: 1, tension: 100, friction: 5, useNativeDriver: true }),
             ]).start();
         }
     }, [isSelected]);
 
-    const handlePressIn = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.95,
-            useNativeDriver: true,
-        }).start();
-    };
-
-    const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            tension: 50,
-            friction: 5,
-            useNativeDriver: true,
-        }).start();
-    };
+    const handlePressIn = () => Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+    const handlePressOut = () => Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 5, useNativeDriver: true }).start();
 
     let displayText = '';
     let itemId = '';
 
-    if (type === 'classExam') {
-        displayText = item.Subject;
-        itemId = item.Subject;
-    } else if (type === 'subjectExam') {
-        displayText = item.Topic;
-        itemId = item.Topic;
-    } else if (type === 'topicExam') {
-        displayText = item.Subtopic;
-        itemId = item.Subtopic;
-    }
+    if (type === 'classExam') { displayText = item.Subject; itemId = item.Subject; }
+    else if (type === 'subjectExam') { displayText = item.Topic; itemId = item.Topic; }
+    else if (type === 'topicExam') { displayText = item.Subtopic; itemId = item.Subtopic; }
+    else if (type === 'JAMB') { displayText = item.Subject; itemId = item.Subject; } // ← JAMB uses Subject too
 
     return (
-        <Animated.View
-            style={{
-                opacity: fadeAnim,
-                transform: [{ scale: scaleAnim }],
-            }}
-        >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity
-                style={[
-                    styles.subjectItem,
-                    isSelected && styles.subjectItemSelected,
-                ]}
+                style={[styles.subjectItem, isSelected && styles.subjectItemSelected]}
                 onPress={() => onPress(itemId)}
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
@@ -118,13 +68,9 @@ const AnimatedSubjectItem = ({ item, index, isSelected, onPress, type }) => {
                 </Animated.View>
 
                 <View style={styles.subCont}>
-                    {(type === 'classExam' || type === 'subjectExam') && (
+                    {(type === 'classExam' || type === 'subjectExam' || type === 'JAMB') && (
                         <Image
-                            source={
-                                item.Icon
-                                    ? { uri: item.Icon }
-                                    : require('../assets/education.png')
-                            }
+                            source={item.Icon ? { uri: item.Icon } : require('../assets/education.png')}
                             style={styles.subImg}
                         />
                     )}
@@ -135,26 +81,17 @@ const AnimatedSubjectItem = ({ item, index, isSelected, onPress, type }) => {
     );
 };
 
-// Animated Start Button Component
+// ─── Animated Start Button ─────────────────────────────────────────────────
 const AnimatedStartButton = ({ onPress, disabled, selectedCount }) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
-    // Pulse animation when enabled
     React.useEffect(() => {
         if (!disabled) {
             const pulse = Animated.loop(
                 Animated.sequence([
-                    Animated.timing(pulseAnim, {
-                        toValue: 1.05,
-                        duration: 1000,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(pulseAnim, {
-                        toValue: 1,
-                        duration: 1000,
-                        useNativeDriver: true,
-                    }),
+                    Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
                 ])
             );
             pulse.start();
@@ -164,35 +101,13 @@ const AnimatedStartButton = ({ onPress, disabled, selectedCount }) => {
         }
     }, [disabled]);
 
-    const handlePressIn = () => {
-        if (!disabled) {
-            Animated.spring(scaleAnim, {
-                toValue: 0.95,
-                useNativeDriver: true,
-            }).start();
-        }
-    };
-
-    const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            tension: 50,
-            friction: 5,
-            useNativeDriver: true,
-        }).start();
-    };
+    const handlePressIn = () => { if (!disabled) Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start(); };
+    const handlePressOut = () => Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 5, useNativeDriver: true }).start();
 
     return (
-        <Animated.View
-            style={{
-                transform: [{ scale: disabled ? 1 : Animated.multiply(scaleAnim, pulseAnim) }],
-            }}
-        >
+        <Animated.View style={{ transform: [{ scale: disabled ? 1 : Animated.multiply(scaleAnim, pulseAnim) }] }}>
             <TouchableOpacity
-                style={[
-                    styles.startButton,
-                    disabled && styles.startButtonDisabled,
-                ]}
+                style={[styles.startButton, disabled && styles.startButtonDisabled]}
                 onPress={onPress}
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
@@ -207,161 +122,172 @@ const AnimatedStartButton = ({ onPress, disabled, selectedCount }) => {
     );
 };
 
-// Main ExamScreen Component
+// ─── Main ExamScreen ───────────────────────────────────────────────────────
 const ExamScreen = ({ route, navigation }) => {
     const [subjects, setSubjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [Exam, setExam] = useState('');
-    const { userData } = useUser();
+    const [examLabel, setExamLabel] = useState('');
     const [selectedSubjects, setSelectedSubjects] = useState([]);
+
+    const { userData } = useUser();
     const { type, subject, topic, topicId, subtopic, userClass } = route.params;
 
-    const toggleSubject = (subject) => {
-        const isSelected = selectedSubjects.includes(subject);
-        const isJamb = userData.class?.toLowerCase() === 'jamb';
+    // ── Selection limits ──────────────────────────────────────────────────
+    const MAX_SELECTIONS = {
+        JAMB: 4,
+        classExam: userData.class?.toLowerCase() === 'jamb' ? 4 : 1,
+        subjectExam: Infinity,
+        topicExam: Infinity,
+    };
 
-        if (!isJamb) {
-            if (type === 'classExam') {
-                if (!isSelected && selectedSubjects.length >= 1) {
-                    Alert.alert('Limit Reached', 'You can only select 1 subject.');
-                    return;
-                }
-            }
-        } else {
-            if (type === 'classExam') {
-                if (!isSelected && selectedSubjects.length >= 4) {
-                    Alert.alert('Limit Reached', 'You can only select up to 4 subjects.');
-                    return;
-                }
-            }
+    const toggleSubject = (id) => {
+        const isSelected = selectedSubjects.includes(id);
+        const limit = MAX_SELECTIONS[type] ?? 1;
+
+        if (!isSelected && selectedSubjects.length >= limit) {
+            Alert.alert('Limit Reached', `You can only select up to ${limit} subject${limit > 1 ? 's' : ''}.`);
+            return;
         }
 
-        if (isSelected) {
-            setSelectedSubjects((prev) => prev.filter((s) => s !== subject));
+        // classExam (non-JAMB) replaces selection instead of toggling
+        if (type === 'classExam' && !isSelected) {
+            setSelectedSubjects([id]);
         } else {
-            if (type === 'classExam') {
-                setSelectedSubjects([subject]);
-            } else {
-                setSelectedSubjects((prev) => [...prev, subject]);
-            }
+            setSelectedSubjects(prev => isSelected ? prev.filter(s => s !== id) : [...prev, id]);
         }
     };
 
+    // ── Exam label ────────────────────────────────────────────────────────
     useEffect(() => {
-        const changeExamTitleName = () => {
-            if (type === 'classExam') {
-                setExam('subject');
-            }
-            if (type === 'subjectExam') {
-                setExam('topic');
-            }
-            if (type === 'topicExam') {
-                setExam('subtopic');
-            }
-        };
-        changeExamTitleName();
+        const labels = { classExam: 'subject', subjectExam: 'topic', topicExam: 'subtopic', JAMB: 'JAMB subject' };
+        setExamLabel(labels[type] ?? type);
     }, [type]);
 
+    // ── Start exam ────────────────────────────────────────────────────────
     const handleStartExam = () => {
         if (selectedSubjects.length < 1) {
             Alert.alert('No Subject Selected', 'Select at least 1 subject.');
             return;
         }
-        Alert.alert('These are the selected subject(s)', selectedSubjects.join(', '));
-        let examId = null;
-      const prefix = selectedSubjects[0].slice(0, 3).toUpperCase();
-        const randomCode = Math.random()
-        .toString(36)
-        .substring(2, 6)
-        .toUpperCase();
-        examId = `${prefix}${randomCode}`;
-        if (type === 'classExam') {
-            navigation.navigate('Question', {
-                subtopicId: null,
-                subtopic: null,
-                selectedSubjects: selectedSubjects,
-                type: type,
-                subject: selectedSubjects,
-                topic: null,
-                examId: examId,
-            });
-        } else if (type === 'subjectExam') {
-            navigation.navigate('Question', {
-                subtopicId: null,
-                subtopic: null,
-                selectedSubjects: selectedSubjects,
-                type: type,
-                subject,
-                topic: selectedSubjects,
-                examId: examId,
-            });
-        } else if (type === 'topicExam') {
-            navigation.navigate('Question', {
-                subtopicId: null,
-                subtopic: selectedSubjects,
-                selectedSubjects: selectedSubjects,
-                type: type,
-                subject,
-                topic,
-                examId: examId,
-            });
+        if (type === 'JAMB' && selectedSubjects.length > 4) {
+            Alert.alert('Limit Reached', 'You can only select a maximum of 4 subjects for JAMB.');
+            return;
         }
+
+        // ==========================================
+        // 🚀 PRIORITIZE ENGLISH LOGIC
+        // ==========================================
+        let prioritizedSubjects = [...selectedSubjects]; // Clone to avoid mutating state directly
+
+        const englishIndex = prioritizedSubjects.findIndex(
+            sub => sub.toLowerCase() === 'english'
+        );
+
+        // If English is found AND it's not already at index 0
+        if (englishIndex > 0) {
+            const englishSub = prioritizedSubjects.splice(englishIndex, 1)[0]; // Remove it
+            prioritizedSubjects.unshift(englishSub); // Paste it at the front
+        }
+        // ==========================================
+
+        // Use the new `prioritizedSubjects` array for the prefix
+        const prefix = prioritizedSubjects[0].slice(0, 3).toUpperCase();
+        const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const examId = `${prefix}${randomCode}`;
+
+        // Pass `prioritizedSubjects` to the base payload instead of the old array
+        const base = { examId, type, selectedSubjects: prioritizedSubjects };
+
+        const payloads = {
+            JAMB: { ...base, subtopicId: null, subtopic: null, subject: null, topic: null },
+            classExam: { ...base, subtopicId: null, subtopic: null, subject: prioritizedSubjects, topic: null },
+            subjectExam: { ...base, subtopicId: null, subtopic: null, subject, topic: prioritizedSubjects },
+            topicExam: { ...base, subtopicId: null, subtopic: prioritizedSubjects, subject, topic },
+        };
+
+        const payload = payloads[type];
+        if (!payload) {
+            Alert.alert('Error', 'Unknown exam type.');
+            return;
+        }
+
+        navigation.navigate('Question', payload);
     };
+    // ── Fetch data ────────────────────────────────────────────────────────
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             setError('');
             try {
-                let response;
+                let data;
 
                 switch (type) {
-                    case 'classExam':
-                        response = await axios.post('https://homeedu.fsdgroup.com.ng/api/subjects', {
+                    // ── classExam: fetch subjects for the student's class ──
+                    case 'classExam': {
+                        const res = await axios.post('https://homeedu.fsdgroup.com.ng/api/subjects', {
                             class: userData.class,
                         });
-                        if (response.data.status === 200) {
-                            setSubjects(response.data.data);
-                        } else {
-                            setError('Failed to load subjects.');
-                        }
+                        if (res.data.status === 200) { setSubjects(res.data.data); }
+                        else { setError('Failed to load subjects.'); }
                         break;
+                    }
 
-                    case 'subjectExam':
-                        try {
-                            const response = await fetch(`https://homeedu.fsdgroup.com.ng/api/topics/${subject}`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({ class: userClass }),
+                    // ── JAMB: same endpoint as classExam but with 'JAMB' class ──
+                    // FIX: JAMB was hitting the default case and showing "Invalid type"
+                    case 'JAMB': {
+                        const res = await axios.post('https://homeedu.fsdgroup.com.ng/api/subjects', {
+                            class: 'JAMB',
+                        });
+
+                        if (res.data.status === 200) {
+                            let fetchedSubjects = [...res.data.data];
+
+                            const englishIndex = fetchedSubjects.findIndex(sub => {
+                                // FIX: Added sub.Subject (Capital S) to match your API payload
+                                const subjectName = typeof sub === 'string' ? sub : (sub.Subject || sub.subject || sub.name || '');
+                                return subjectName.toLowerCase().includes('english');
                             });
 
-                            const data = await response.json();
-                            if (data.status === 200) {
-                                setSubjects(data.data);
-                            } else {
-                                setError('Failed to load topics.');
+                            if (englishIndex > 0) {
+                                const englishItem = fetchedSubjects.splice(englishIndex, 1)[0];
+                                fetchedSubjects.unshift(englishItem);
                             }
-                        } catch (err) {
-                            setError('An error occurred while fetching topics.');
-                        }
-                        break;
 
-                    case 'topicExam':
-                        response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topicId}`);
-                        if (response.data.status === 200) {
-                            setSubjects(response.data.data);
-                        } else {
-                            setError('Failed to load subtopics.');
+                            setSubjects(fetchedSubjects);
                         }
+                        else { setError('Failed to load JAMB subjects.'); }
                         break;
+                    }
+                    // ── subjectExam: fetch topics for a subject ──
+                    case 'subjectExam': {
+                        const res = await fetch('https://homeedu.fsdgroup.com.ng/api/topics/' + subject, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ class: userClass }),
+                        });
+                        data = await res.json();
+                        if (data.status === 200) { setSubjects(data.data); }
+                        else { setError('Failed to load topics.'); }
+                        break;
+                    }
+
+                    // ── topicExam: fetch subtopics for a topic ──
+                    case 'topicExam': {
+                        const res = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topicId}`);
+                        if (res.data.status === 200) { setSubjects(res.data.data); }
+                        else { setError('Failed to load subtopics.'); }
+                        break;
+                    }
 
                     default:
-                        setError('Invalid type.');
+                        // Log it so you can see exactly what type value arrived
+                        console.warn('[ExamScreen] Unhandled exam type:', type, '— route params:', route.params);
+                        setError(`Unknown exam type: "${type}". Please go back and try again.`);
                 }
             } catch (err) {
-                setError('An error occurred while fetching data.');
+                console.error('[ExamScreen] Fetch error:', err);
+                setError('Network error — check your connection and try again.');
             } finally {
                 setLoading(false);
             }
@@ -370,6 +296,7 @@ const ExamScreen = ({ route, navigation }) => {
         fetchData();
     }, [type, subject, topic, userData.class]);
 
+    // ── Render states ─────────────────────────────────────────────────────
     if (loading) {
         return (
             <View style={styles.center}>
@@ -382,6 +309,9 @@ const ExamScreen = ({ route, navigation }) => {
         return (
             <View style={styles.center}>
                 <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <Text style={styles.backButtonText}>Go Back</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -390,36 +320,32 @@ const ExamScreen = ({ route, navigation }) => {
         <View style={styles.subjectSelectionContainer}>
             <View style={styles.headerCard}>
                 <Text style={styles.subjectSelectionTitle}>
-                    Select {Exam} for {userData.class}
+                    Select {examLabel} for {userData.class}
                 </Text>
                 {selectedSubjects.length > 0 && (
-                    <Text style={styles.selectionCount}>
-                        {selectedSubjects.length} selected
-                    </Text>
+                    <Text style={styles.selectionCount}>{selectedSubjects.length} selected</Text>
                 )}
             </View>
 
             <FlatList
                 data={subjects}
                 keyExtractor={(item) => {
-                    if (type === 'classExam') return item.SubjectId.toString();
-                    if (type === 'subjectExam') return item.TopicId.toString();
-                    if (type === 'topicExam') return item.SubtopicId.toString();
+                    if (type === 'classExam' || type === 'JAMB') return item.SubjectId?.toString() ?? item.Subject;
+                    if (type === 'subjectExam') return item.TopicId?.toString() ?? item.Topic;
+                    if (type === 'topicExam') return item.SubtopicId?.toString() ?? item.Subtopic;
                     return item.id?.toString();
                 }}
                 renderItem={({ item, index }) => {
                     let itemId = '';
-                    if (type === 'classExam') itemId = item.Subject;
+                    if (type === 'classExam' || type === 'JAMB') itemId = item.Subject;
                     else if (type === 'subjectExam') itemId = item.Topic;
                     else if (type === 'topicExam') itemId = item.Subtopic;
-
-                    const isSelected = selectedSubjects.includes(itemId);
 
                     return (
                         <AnimatedSubjectItem
                             item={item}
                             index={index}
-                            isSelected={isSelected}
+                            isSelected={selectedSubjects.includes(itemId)}
                             onPress={toggleSubject}
                             type={type}
                         />
@@ -438,124 +364,25 @@ const ExamScreen = ({ route, navigation }) => {
     );
 };
 
+// ─── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-    subjectSelectionContainer: {
-        flex: 1,
-        backgroundColor: '#F8F9FE',
-        padding: 16,
-    },
-    headerCard: {
-        backgroundColor: '#FFFFFF',
-        padding: 20,
-        borderRadius: 16,
-        marginBottom: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 4,
-        alignItems: 'center',
-    },
-    subjectSelectionTitle: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: '#2D3748',
-        textAlign: 'center',
-        letterSpacing: 0.3,
-    },
-    selectionCount: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#864AF9',
-        marginTop: 8,
-        backgroundColor: '#F7F3FF',
-        paddingHorizontal: 16,
-        paddingVertical: 6,
-        borderRadius: 12,
-    },
-    subjectList: {
-        paddingBottom: 24,
-    },
-    subjectItem: {
-        backgroundColor: '#FFFFFF',
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        borderRadius: 16,
-        borderLeftWidth: 4,
-        borderLeftColor: '#E2E8F0',
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 2,
-        gap: 12,
-    },
-    subjectItemSelected: {
-        borderLeftColor: '#864AF9',
-        backgroundColor: '#F7F3FF',
-        shadowColor: '#864AF9',
-        shadowOpacity: 0.15,
-        elevation: 4,
-    },
-    subCont: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    subImg: {
-        width: 40,
-        height: 40,
-        borderRadius: 8,
-        backgroundColor: '#F7F9FC',
-    },
-    subjectText: {
-        fontSize: 17,
-        fontWeight: '600',
-        color: '#2D3748',
-        flex: 1,
-        letterSpacing: 0.2,
-    },
-    startButton: {
-        backgroundColor: '#864AF9',
-        paddingVertical: 16,
-        paddingHorizontal: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 8,
-        marginBottom: 16,
-        shadowColor: '#864AF9',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    startButtonDisabled: {
-        backgroundColor: '#CBD5E0',
-        shadowOpacity: 0.1,
-    },
-    startButtonText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#FFFFFF',
-        letterSpacing: 0.5,
-    },
-    center: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#F8F9FE',
-    },
-    errorText: {
-        fontSize: 16,
-        color: '#F56565',
-        textAlign: 'center',
-        marginTop: 20,
-    },
+    subjectSelectionContainer: { flex: 1, backgroundColor: '#F8F9FE', padding: 16 },
+    headerCard: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4, alignItems: 'center' },
+    subjectSelectionTitle: { fontSize: 22, fontWeight: '700', color: '#2D3748', textAlign: 'center', letterSpacing: 0.3 },
+    selectionCount: { fontSize: 14, fontWeight: '600', color: '#864AF9', marginTop: 8, backgroundColor: '#F7F3FF', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12 },
+    subjectList: { paddingBottom: 24 },
+    subjectItem: { backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, borderLeftWidth: 4, borderLeftColor: '#E2E8F0', marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2, gap: 12 },
+    subjectItemSelected: { borderLeftColor: '#864AF9', backgroundColor: '#F7F3FF', shadowColor: '#864AF9', shadowOpacity: 0.15, elevation: 4 },
+    subCont: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    subImg: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#F7F9FC' },
+    subjectText: { fontSize: 17, fontWeight: '600', color: '#2D3748', flex: 1, letterSpacing: 0.2 },
+    startButton: { backgroundColor: '#864AF9', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 16, shadowColor: '#864AF9', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+    startButtonDisabled: { backgroundColor: '#CBD5E0', shadowOpacity: 0.1 },
+    startButtonText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.5 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FE' },
+    errorText: { fontSize: 16, color: '#F56565', textAlign: 'center', marginTop: 20, marginHorizontal: 24 },
+    backButton: { marginTop: 20, backgroundColor: '#864AF9', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 },
+    backButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
 
 export default ExamScreen;

@@ -1,15 +1,21 @@
 import React from 'react';
-import { WidgetTaskHandlerProps } from 'react-native-android-widget';
-import { StatsWidget } from './src/widgets/StatsWidget'; // <--- Check this path!
+import { StatsWidget } from './src/widgets/StatsWidget';
 
 export async function widgetTaskHandler(props) {
-  const widgetInfo = props.widgetInfo;
+  const { widgetInfo } = props;
   const widgetName = widgetInfo.widgetName;
 
+  console.log('📱 Widget task handler called:', widgetName);
+
   if (widgetName === 'StatsWidget') {
-    // Default empty state if no data passed yet
-    props.renderWidget(
-      <StatsWidget streaks={0} stars={0} />
+    // Get data from widgetInfo, default to 0 if not provided
+    const streaks = widgetInfo.streaks || 0;
+    const stars = widgetInfo.stars || 0;
+
+    console.log('✅ Rendering StatsWidget with:', { streaks, stars });
+
+    await props.renderWidget(
+      <StatsWidget streaks={streaks} stars={stars} />
     );
   }
 }

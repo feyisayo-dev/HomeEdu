@@ -187,28 +187,39 @@ const renderContentWithMath = (rawContent, textStyle = {}) => {
   // STEP 1: Apply Unicode Fix globally before splitting
   const content = fixUnicode(rawContent);
 
-  // Step 2: Split by LaTeX Math ($$ ... $$)
-  const parts = content.split(/(\$\$[\s\S]*?\$\$|<table[\s\S]*?<\/table>)/g);
+  // Step 2: Split by LaTeX Math ($$...$$ OR $...$) and tables
+  // Updated regex to capture both display ($$) and inline ($) math
+  const parts = content.split(/(\$\$[\s\S]*?\$\$|\$[^\$\n]+?\$|<table[\s\S]*?<\/table>)/g);
 
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
       {parts.map((part, index) => {
-        // CASE A: Handle Math
+        // CASE A: Handle Display Math ($$...$$)
         if (part.startsWith("$$") && part.endsWith("$$")) {
-          const latex = part.slice(2, -2);
+          const latex = part.slice(2, -2).trim();
           return (
-            <SmartMath key={`math-${index}`} latex={latex} inline={true} />
+            <SmartMath key={`math-block-${index}`} latex={latex} inline={false} />
           );
         }
+        
+        // CASE B: Handle Inline Math ($...$)
+        if (part.startsWith("$") && part.endsWith("$") && !part.startsWith("$$")) {
+          const latex = part.slice(1, -1).trim();
+          return (
+            <SmartMath key={`math-inline-${index}`} latex={latex} inline={true} />
+          );
+        }
+        
+        // CASE C: Handle Tables
         if (part.startsWith("<table") && part.endsWith("</table>")) {
           return (
-            // We force this to take full width by breaking the flex row flow if needed
             <View key={`table-${index}`} style={{ width: '100%' }}>
               <SmartHtml htmlContent={part} />
             </View>
           );
         }
-        // CASE B: Handle Text with Styles
+        
+        // CASE D: Handle Text with Styles
         if (part) {
           // Split by Bold (**), Underline (__), or Color ({hex}...)
           const fragments = part.split(
@@ -232,6 +243,7 @@ const renderContentWithMath = (rawContent, textStyle = {}) => {
                 </Text>
               );
             }
+            
             // 2. Handle Underline (__text__)
             if (sub.startsWith("__") && sub.endsWith("__")) {
               return (
@@ -258,6 +270,7 @@ const renderContentWithMath = (rawContent, textStyle = {}) => {
                 <Text
                   key={key}
                   style={[styles.label, textStyle, { color: colorMatch[1] }]}
+                  selectable={false}
                 >
                   {colorMatch[2]}
                 </Text>
