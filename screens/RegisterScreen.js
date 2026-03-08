@@ -24,7 +24,7 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [confirmpassword, setconfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState(new Date());
@@ -41,7 +41,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [currentStage, setCurrentStage] = useState(1);
 
   const totalStages = 4;
-const dropdownItems = useMemo(() => {
+  const dropdownItems = useMemo(() => {
     return countryList.map((country) => ({
       label: `${country.name}`,
       value: country.short_name,
@@ -57,14 +57,14 @@ const dropdownItems = useMemo(() => {
   }, [countryList]);
   useEffect(() => {
     const fetchData = async () => {
-     
+
       try {
         const classResponse = await axios.get(
           "https://homeedu.fsdgroup.com.ng/api/getClassForUser"
         );
         const classData = classResponse.data;
 
-       
+
         if (classData.status === 200 && classData.class) {
           setClasses(classData.class);
         } else {
@@ -74,7 +74,7 @@ const dropdownItems = useMemo(() => {
         console.error("Error fetching classes:", error.message);
       }
 
-     
+
       try {
         const cachedCountries = await AsyncStorage.getItem("countries");
 
@@ -99,7 +99,7 @@ const dropdownItems = useMemo(() => {
         }
       } catch (error) {
         console.error("Error fetching countries:", error.message);
-       
+
       }
     };
 
@@ -116,89 +116,98 @@ const dropdownItems = useMemo(() => {
   const showDatePicker = () => setShowPicker(true);
 
   const handleRegister = async () => {
- 
-  const validateEmail = (email) => {
-    return String(email)
-      .toLowerCase()
-      .match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+
+    const validateEmail = (email) => {
+      return String(email)
+        .toLowerCase()
+        .match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+    };
+
+
+
+    if (!username || !fullName || !dob || !email || !password || !phoneNumber || !selectedClass || !parentName || !parentContact || !address) {
+      Alert.alert("Missing Information", "Please fill in all required fields.");
+      return;
+    }
+
+
+    if (username.length > 188) {
+      Alert.alert("Invalid Username", "Username is too long.");
+      return;
+    }
+
+
+    if (fullName.length < 6) {
+      Alert.alert("Invalid Name", "Full name must be at least 6 characters.");
+      return;
+    }
+
+
+    if (!validateEmail(email)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+
+    if (password.length < 8) {
+      Alert.alert("Weak Password", "Password must be at least 8 characters long.");
+      return;
+    }
+
+    // ✅ Should also check complexity
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password)) {
+      Alert.alert(
+        "Weak Password",
+        "Password must have:\n• Uppercase letter\n• Lowercase letter\n• Number\n• At least 8 characters"
+      );
+      return;
+    }
+
+
+    if (password !== confirmpassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return;
+    }
+
+
+    if (phoneNumber.length < 10) {
+      Alert.alert("Invalid Phone", "Please enter a valid phone number.");
+      return;
+    }
+
+    try {
+
+      const response = await axios.post(
+        "https://homeedu.fsdgroup.com.ng/api/AddStudent",
+        {
+          username,
+          fullName,
+          dob,
+          email,
+          password,
+          phoneNumber,
+          class: selectedClass,
+          parentName,
+          parentContact,
+          address,
+        }
+      );
+
+      Alert.alert("Success", "Account created successfully!");
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Login" }],
+      });
+    } catch (error) {
+
+      const serverMessage = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join("\n")
+        : "Registration failed. Please try again.";
+
+      Alert.alert("Registration Error", serverMessage);
+      console.log("Validation details:", error.response?.data);
+    }
   };
-
- 
- 
-  if (!username || !fullName || !dob || !email || !password || !phoneNumber || !selectedClass || !parentName || !parentContact || !address) {
-    Alert.alert("Missing Information", "Please fill in all required fields.");
-    return;
-  }
-
- 
-  if (username.length > 188) {
-    Alert.alert("Invalid Username", "Username is too long.");
-    return;
-  }
-
- 
-  if (fullName.length < 6) {
-    Alert.alert("Invalid Name", "Full name must be at least 6 characters.");
-    return;
-  }
-
- 
-  if (!validateEmail(email)) {
-    Alert.alert("Invalid Email", "Please enter a valid email address.");
-    return;
-  }
-
- 
-  if (password.length < 8) {
-    Alert.alert("Weak Password", "Password must be at least 8 characters long.");
-    return;
-  }
-
- 
-  if (password !== confirmpassword) {
-    Alert.alert("Error", "Passwords do not match.");
-    return;
-  }
-
- 
-  if (phoneNumber.length < 10) {
-    Alert.alert("Invalid Phone", "Please enter a valid phone number.");
-    return;
-  }
-
-  try {
-   
-    const response = await axios.post(
-      "https://homeedu.fsdgroup.com.ng/api/AddStudent",
-      {
-        username,
-        fullName,
-        dob,
-        email,
-        password,
-        phoneNumber,
-        class: selectedClass,
-        parentName,
-        parentContact,
-        address,
-      }
-    );
-
-    Alert.alert("Success", "Account created successfully!");
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "Login" }],
-    });
-  } catch (error) {
-   
-    const serverMessage = error.response?.data?.errors 
-      ? Object.values(error.response.data.errors).flat().join("\n") 
-      : "Registration failed. Please try again.";
-
-    Alert.alert("Registration Error", serverMessage);
-    console.log("Validation details:", error.response?.data);
-  }
-};
 
   const renderStage = () => {
     switch (currentStage) {
@@ -268,10 +277,10 @@ const dropdownItems = useMemo(() => {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.icon}
               >
-                <Ionicons 
-                  name={showPassword ? "eye" : "eye-off"} 
-                  size={20} 
-                  color="#666666" 
+                <Ionicons
+                  name={showPassword ? "eye" : "eye-off"}
+                  size={20}
+                  color="#666666"
                 />
               </TouchableOpacity>
             </View>
@@ -290,10 +299,10 @@ const dropdownItems = useMemo(() => {
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 style={styles.icon}
               >
-                <Ionicons 
-                  name={showConfirmPassword ? "eye" : "eye-off"} 
-                  size={20} 
-                  color="#666666" 
+                <Ionicons
+                  name={showConfirmPassword ? "eye" : "eye-off"}
+                  size={20}
+                  color="#666666"
                 />
               </TouchableOpacity>
             </View>
@@ -311,10 +320,10 @@ const dropdownItems = useMemo(() => {
               onChangeText={setPhoneNumber}
             />
             <Text style={styles.label}>Select Country</Text>
-           <DropDownPicker
+            <DropDownPicker
               open={open}
               value={selectedCountry}
-              items={dropdownItems} 
+              items={dropdownItems}
               setOpen={setOpen}
               setValue={setSelectedCountry}
               placeholder="Select a Country"
@@ -373,7 +382,7 @@ const dropdownItems = useMemo(() => {
             />
           </>
         );
-     
+
       default:
         return null;
     }
@@ -409,7 +418,7 @@ const dropdownItems = useMemo(() => {
                 </Text>
               </TouchableOpacity>
             ) : (
-             
+
               <View style={{ flex: 1, marginHorizontal: 5 }} />
             )}
 
@@ -449,7 +458,7 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingLeft: 20,
     display: "flex",
-   
+
     justifyContent: "center",
   },
   toptext: {

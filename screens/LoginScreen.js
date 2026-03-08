@@ -6,9 +6,11 @@ import {
   Modal,
   StyleSheet,
   Alert,
+  ScrollView,
   ImageBackground,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import axios from "axios";
 import { UserContext } from "../context/UserContext";
@@ -28,6 +30,10 @@ export default function LoginScreen({ navigation }) {
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
+  // --- SPONSORSHIP WELCOME MODAL STATE ---
+  const [sponsorModalVisible, setSponsorModalVisible] = useState(false);
+  const [sponsorshipData, setSponsorshipData] = useState(null);
+
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -46,7 +52,7 @@ export default function LoginScreen({ navigation }) {
     checkLoginStatus();
   }, []);
 
-const handleLogin = async () => {
+  const handleLogin = async () => {
     setLoading(true);
     console.log("=== Login Attempt Started ===");
 
@@ -60,7 +66,6 @@ const handleLogin = async () => {
         }
       );
 
-      // 🔍 DIAGNOSTIC 1: What exactly did Laravel send back?
       console.log("Login API Full Response Data:", response.data);
 
       if (response.data.userData) {
@@ -71,27 +76,46 @@ const handleLogin = async () => {
         );
         console.log("✅ UserData saved to AsyncStorage");
 
-        // 🔍 DIAGNOSTIC 2: Check token extraction
-        // Added a fallback just in case your API uses 'token' instead of 'accessToken'
+        // Save Token
         const token = response.data.accessToken || response.data.token;
         console.log("Extracted Token to save:", token);
 
         if (token) {
-          // Force it to be a string just to be absolutely safe
-          await AsyncStorage.setItem('token', String(token));
+          await AsyncStorage.setItem("token", String(token));
           console.log("✅ Token successfully saved to AsyncStorage");
         } else {
-          console.warn("⚠️ WARNING: Token is undefined! The API didn't return 'accessToken' or 'token'.");
+          console.warn(
+            "⚠️ WARNING: Token is undefined! The API didn't return 'accessToken' or 'token'."
+          );
+        }
+
+        // 🎯 NEW: Save Sponsorship Data if exists
+        if (response.data.sponsorship && response.data.sponsorship.is_sponsored) {
+          await AsyncStorage.setItem(
+            "sponsorship",
+            JSON.stringify(response.data.sponsorship)
+          );
+          console.log("✅ Sponsorship data saved to AsyncStorage");
+          
+          // Show welcome modal for sponsored students
+          setSponsorshipData(response.data.sponsorship);
+          setSponsorModalVisible(true);
+        } else {
+          // Not sponsored, go directly to dashboard
+          setUserData(response.data.userData);
+          navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
         }
 
         setUserData(response.data.userData);
-        navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
       } else {
         console.log("Login succeeded but no userData found in response.");
         Alert.alert("Success", response.data.message);
       }
     } catch (error) {
-      console.error("❌ Login API Error:", error.response?.data || error.message);
+      console.error(
+        "❌ Login API Error:",
+        error.response?.data || error.message
+      );
       Alert.alert(
         "Error",
         error.response?.data?.message || "Something went wrong"
@@ -101,7 +125,14 @@ const handleLogin = async () => {
       console.log("=== Login Attempt Finished ===");
     }
   };
-  // --- NEW: HANDLE FORGOT PASSWORD ---
+
+  // Navigate to dashboard from sponsor welcome modal
+  const handleContinueToDashboard = () => {
+    setSponsorModalVisible(false);
+    navigation.reset({ index: 0, routes: [{ name: "Dashboard" }] });
+  };
+
+  // --- HANDLE FORGOT PASSWORD ---
   const handleForgotPassword = async () => {
     if (!resetEmail) {
       Alert.alert("Error", "Please enter your email address");
@@ -116,7 +147,7 @@ const handleLogin = async () => {
           email: resetEmail,
         },
         {
-          headers: { "Content-Type": "multipart/form-data" }, // PHP $_POST often likes form-data
+          headers: { "Content-Type": "multipart/form-data" },
         }
       );
 
@@ -181,7 +212,6 @@ const handleLogin = async () => {
           </TouchableOpacity>
         </View>
 
-        {/* --- FORGOT PASSWORD LINK --- */}
         <TouchableOpacity
           onPress={() => setModalVisible(true)}
           style={{ alignSelf: "flex-end", marginBottom: 20 }}
@@ -260,6 +290,94 @@ const handleLogin = async () => {
           </View>
         </View>
       </Modal>
+
+      {/* --- 🎯 NEW: SPONSORSHIP WELCOME MODAL --- */}
+<Modal
+  animationType="slide" // Slide feels a bit more natural for large bottom-heavy modals
+  transparent={true}
+  visible={sponsorModalVisible}
+  onRequestClose={handleContinueToDashboard}
+>
+  <View style={styles.sponsorOverlay}>
+    <View style={styles.sponsorModalView}>
+      
+      {/* Scrollable Content */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        style={styles.scrollView}
+      >
+        <View style={styles.successIcon}>
+          <Ionicons name="trophy" size={45} color="#FFD700" />
+        </View>
+
+        <Text style={styles.sponsorTitle}>🎉 Welcome Back!</Text>
+        
+        {sponsorshipData && (
+          <>
+            <Text style={styles.sponsorSubtitle}>
+              Your education is proudly sponsored by
+            </Text>
+
+            {/* Politician Info Group */}
+            <View style={styles.politicianCard}>
+              {sponsorshipData.politician.image && (
+                <Image
+                  source={{ uri: sponsorshipData.politician.image }}
+                  style={styles.politicianPhoto}
+                />
+              )}
+              <Text style={styles.politicianName}>
+                {sponsorshipData.politician.name}
+              </Text>
+              <Text style={styles.politicianPosition}>
+                {sponsorshipData.politician.position}
+              </Text>
+              <Text style={styles.politicianConstituency}>
+                {sponsorshipData.politician.constituency}
+              </Text>
+            </View>
+
+            {/* Sponsorship Badge */}
+            <View style={styles.sponsorBadge}>
+              <Ionicons name="shield-checkmark" size={18} color="#10B981" />
+              <Text style={styles.badgeText}>Government Sponsored Student</Text>
+            </View>
+
+            {/* Expiry Info */}
+            <View style={styles.expiryCard}>
+              <Text style={styles.expiryLabel}>Sponsorship Valid Until</Text>
+              <Text style={styles.expiryDate}>
+                {sponsorshipData.expires_at_formatted}
+              </Text>
+              <Text style={styles.daysRemaining}>
+                {sponsorshipData.days_remaining} days remaining
+              </Text>
+            </View>
+
+            {/* Motivational Message */}
+            <Text style={styles.motivationalText}>
+              Make the most of this opportunity and excel in your studies! 📚
+            </Text>
+          </>
+        )}
+      </ScrollView>
+
+      {/* Sticky Continue Button */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.continueBtn}
+          onPress={handleContinueToDashboard}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.continueBtnText}>Continue to Dashboard</Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+    </View>
+  </View>
+</Modal>
     </ImageBackground>
   );
 }
@@ -336,7 +454,7 @@ const styles = StyleSheet.create({
   link: { color: "#666666", marginTop: 10, textAlign: "center" },
   regLink: { color: "#864af9" },
 
-  // Modal Styles
+  // Forgot Password Modal Styles
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -380,5 +498,164 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: "45%",
     alignItems: "center",
+  },
+sponsorOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)", // Slightly lighter for a modern feel
+  },
+  sponsorModalView: {
+    width: "90%",
+    maxHeight: "85%", // Prevents it from touching screen edges
+    backgroundColor: "white",
+    borderRadius: 24,
+    overflow: "hidden", // Keeps the ScrollView inside the rounded corners
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  scrollView: {
+    width: "100%",
+  },
+  scrollContent: {
+    padding: 24,
+    alignItems: "center",
+  },
+  successIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#FEF3C7", // Yellow-100
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  sponsorTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1F2937",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  sponsorSubtitle: {
+    fontSize: 15,
+    color: "#6B7280",
+    marginBottom: 24,
+    textAlign: "center",
+  },
+  politicianCard: {
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 20,
+  },
+  politicianPhoto: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: "#864AF9",
+    marginBottom: 12,
+  },
+  politicianName: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#864AF9",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  politicianPosition: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 2,
+    textAlign: "center",
+  },
+  politicianConstituency: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    textAlign: "center",
+  },
+  sponsorBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5", // Emerald-50
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#A7F3D0", // Emerald-200
+    marginBottom: 24,
+  },
+  badgeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#059669", // Emerald-600
+    marginLeft: 6,
+  },
+  expiryCard: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    borderRadius: 16,
+    padding: 16,
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  expiryLabel: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+  expiryDate: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  daysRemaining: {
+    fontSize: 14,
+    color: "#10B981",
+    fontWeight: "700",
+  },
+  motivationalText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#6B7280",
+    textAlign: "center",
+    fontStyle: "italic",
+    paddingHorizontal: 10,
+  },
+  footer: {
+    padding: 20,
+    paddingTop: 10,
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6", // Subtle divider line
+  },
+  continueBtn: {
+    flexDirection: "row",
+    backgroundColor: "#864AF9",
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    shadowColor: "#864AF9",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  continueBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    marginRight: 8,
   },
 });

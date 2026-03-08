@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ImageBackground, Image, ActivityIndicator, Modal, Linking, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ImageBackground, Image, ActivityIndicator, Modal, Linking, Dimensions, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserContext } from '../context/UserContext';
 
 // ⚠️ CHANGE THIS VERSION NUMBER EVERY TIME YOU BUILD A NEW APK
-const CURRENT_APP_VERSION = "1.1.7"; 
+const CURRENT_ANDROID_VERSION = "1.1.8";
+const CURRENT_IOS_VERSION = "1.0.0";
 
 // ⚠️ MAINTENANCE MODE TOGGLE - Set to true to enable maintenance mode
 const MAINTENANCE_MODE = false; // Change to true when servers are down
@@ -12,7 +13,7 @@ const MAINTENANCE_CONFIG = {
   title: "Under Maintenance",
   message: "We're currently performing maintenance to improve your experience. Please check back soon.",
   estimated_time: "2-3 hours",
-  support_url: null, 
+  support_url: null,
 };
 
 const currentTime = new Date().getTime();
@@ -25,13 +26,13 @@ const HomePage = ({ navigation }) => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(MAINTENANCE_MODE);
   const [updateData, setUpdateData] = useState(null);
-  
+
   const { setUserData } = useContext(UserContext);
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // --- STEP 1: CHECK MAINTENANCE MODE (HARDCODED IN APP) ---
+        // --- STEP 1: CHECK MAINTENANCE MODE ---
         if (MAINTENANCE_MODE) {
           setCheckingAuth(false);
           return; // Block app usage immediately
@@ -41,27 +42,29 @@ const HomePage = ({ navigation }) => {
         const response = await fetch(VERSION_CHECK_URL);
         const data = await response.json();
 
-        if (data && data.android_version !== CURRENT_APP_VERSION) {
-            setUpdateData(data);
-            setShowUpdateModal(true);
-            
-            // If force_update is true, block the app
-            if (data.force_update) {
-              setCheckingAuth(false);
-              return; 
-            }
-            
-            // If force_update is false, allow user to continue
-            // Fall through to Step 3 to check login session
+        // 🚨 CRITICAL: Determine which version to compare based on the OS
+        const currentAppVersion = Platform.OS === 'ios' ? CURRENT_IOS_VERSION : CURRENT_ANDROID_VERSION;
+        const serverAppVersion = Platform.OS === 'ios' ? data.ios_version : data.android_version;
+
+        // Check if the server provided a version for this OS, and if it doesn't match our app
+        if (data && serverAppVersion && serverAppVersion !== currentAppVersion) {
+          setUpdateData(data);
+          setShowUpdateModal(true);
+
+          // If force_update is true, block the app
+          if (data.force_update) {
+            setCheckingAuth(false);
+            return;
+          }
         }
 
         // --- STEP 3: IF NO UPDATE OR MAINTENANCE, CHECK LOGIN SESSION ---
         const savedUser = await AsyncStorage.getItem('userData');
-        
+
         if (savedUser) {
           const parsedUser = JSON.parse(savedUser);
           setUserData(parsedUser);
-          
+
           navigation.reset({
             index: 0,
             routes: [{ name: 'Dashboard' }],
@@ -75,11 +78,11 @@ const HomePage = ({ navigation }) => {
         // Fallback logic
         const savedUser = await AsyncStorage.getItem('userData');
         if (savedUser) {
-            const parsedUser = JSON.parse(savedUser);
-            setUserData(parsedUser);
-            navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
+          const parsedUser = JSON.parse(savedUser);
+          setUserData(parsedUser);
+          navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
         } else {
-            setCheckingAuth(false);
+          setCheckingAuth(false);
         }
       }
     };
@@ -96,10 +99,18 @@ const HomePage = ({ navigation }) => {
 
   if (checkingAuth) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#864AF9" />
-        <Text style={styles.loadingText}>Checking for updates...</Text>
-      </View>
+      <ImageBackground
+        source={require('../assets/Rectangle_106.png')}
+        style={styles.loadingContainer}
+      >
+        <View style={styles.illustration}>
+          <Image source={require('../assets/EduGraphics.png')} style={styles.illustrationimg} />
+        </View>
+        <View style={styles.loadingContentWrapper}>
+          <ActivityIndicator size="large" color="#864AF9" />
+          <Text style={styles.loadingText}>Checking for updates...</Text>
+        </View>
+      </ImageBackground>
     );
   }
 
@@ -108,110 +119,121 @@ const HomePage = ({ navigation }) => {
       source={require('../assets/Rectangle_106.png')}
       style={styles.background}
     >
-        {/* --- MAINTENANCE MODE MODAL --- */}
-        <Modal
-            animationType="fade"
-            transparent={true}
-            visible={showMaintenanceModal}
-            onRequestClose={() => {}} // Block Android back button
-        >
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <View style={styles.iconCircle}>
-                        <Text style={{fontSize: 40}}>🔧</Text>
-                    </View>
-                    
-                    <Text style={styles.modalTitle}>
-                        {MAINTENANCE_CONFIG.title}
-                    </Text>
-                    
-                    <Text style={styles.modalMessage}>
-                        {MAINTENANCE_CONFIG.message}
-                    </Text>
-
-                    {MAINTENANCE_CONFIG.estimated_time && (
-                        <View style={styles.versionTag}>
-                            <Text style={styles.versionText}>
-                                Estimated time: {MAINTENANCE_CONFIG.estimated_time}
-                            </Text>
-                        </View>
-                    )}
-
-                    {MAINTENANCE_CONFIG.support_url && (
-                        <TouchableOpacity 
-                            style={[styles.updateButton, styles.secondaryBtn]} 
-                            onPress={() => Linking.openURL(MAINTENANCE_CONFIG.support_url)}
-                        >
-                            <Text style={styles.secondaryBtnText}>Contact Support</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
+      {/* --- MAINTENANCE MODE MODAL --- */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showMaintenanceModal}
+        onRequestClose={() => { }} // Block Android back button
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.iconCircle}>
+              <Text style={{ fontSize: 40 }}>🔧</Text>
             </View>
+
+            <Text style={styles.modalTitle}>
+              {MAINTENANCE_CONFIG.title}
+            </Text>
+
+            <Text style={styles.modalMessage}>
+              {MAINTENANCE_CONFIG.message}
+            </Text>
+
+            {MAINTENANCE_CONFIG.estimated_time && (
+              <View style={styles.versionTag}>
+                <Text style={styles.versionText}>
+                  Estimated time: {MAINTENANCE_CONFIG.estimated_time}
+                </Text>
+              </View>
+            )}
+
+            {MAINTENANCE_CONFIG.support_url && (
+              <TouchableOpacity
+                style={[styles.updateButton, styles.secondaryBtn]}
+                onPress={() => Linking.openURL(MAINTENANCE_CONFIG.support_url)}
+              >
+                <Text style={styles.secondaryBtnText}>Contact Support</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- UPDATE MODAL (Can be dismissed if force_update is false) --- */}
+      {!showMaintenanceModal && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showUpdateModal}
+          onRequestClose={handleDismissUpdate}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              {/* Close button - only show if force_update is false */}
+              {updateData && !updateData.force_update && (
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={handleDismissUpdate}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.iconCircle}>
+                <Text style={{ fontSize: 40 }}>🚀</Text>
+              </View>
+
+              <Text style={styles.modalTitle}>
+                {updateData?.title || "Time to Update!"}
+              </Text>
+
+              <Text style={styles.modalMessage}>
+                {updateData?.message || "A new version of HomeEdu is available."}
+              </Text>
+
+              <View style={styles.versionTag}>
+                <Text style={styles.versionText}>
+                  New Version: {Platform.OS === 'ios' ? updateData?.ios_version : updateData?.android_version}
+                </Text>
+              </View>
+
+              {/* Primary Update Button (Dynamic for App Store / Play Store) */}
+              <TouchableOpacity
+                style={[styles.updateButton, styles.primaryBtn]}
+                onPress={() => {
+                  const url = Platform.OS === 'ios' ? updateData?.app_store_url : updateData?.play_store_url;
+                  Linking.openURL(url);
+                }}
+              >
+                <Text style={styles.primaryBtnText}>
+                  Update via {Platform.OS === 'ios' ? 'App Store' : 'Play Store'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Website Download - ONLY show on Android (Apple bans this) */}
+              {Platform.OS === 'android' && (
+                <TouchableOpacity
+                  style={[styles.updateButton, styles.secondaryBtn]}
+                  onPress={() => Linking.openURL(updateData?.website_url)}
+                >
+                  <Text style={styles.secondaryBtnText}>Download directly from Website</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* "Maybe Later" button - only show if force_update is false */}
+              {updateData && !updateData.force_update && (
+                <TouchableOpacity
+                  style={styles.dismissButton}
+                  onPress={handleDismissUpdate}
+                >
+                  <Text style={styles.dismissButtonText}>Maybe Later</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         </Modal>
-
-        {/* --- UPDATE MODAL (Can be dismissed if force_update is false) --- */}
-        {!showMaintenanceModal && (
-            <Modal
-                animationType="fade"
-                transparent={true}
-                visible={showUpdateModal}
-                onRequestClose={handleDismissUpdate} // Allow Android back button to dismiss if not forced
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        {/* Close button - only show if force_update is false */}
-                        {updateData && !updateData.force_update && (
-                            <TouchableOpacity 
-                                style={styles.closeButton}
-                                onPress={handleDismissUpdate}
-                            >
-                                <Text style={styles.closeButtonText}>✕</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        <View style={styles.iconCircle}>
-                            <Text style={{fontSize: 40}}>🚀</Text>
-                        </View>
-                        
-                        <Text style={styles.modalTitle}>
-                            {updateData?.title || "Time to Update!"}
-                        </Text>
-                        
-                        <Text style={styles.modalMessage}>
-                            {updateData?.message || "A new version of HomeEdu is available."}
-                        </Text>
-
-                        <View style={styles.versionTag}>
-                            <Text style={styles.versionText}>New Version: {updateData?.android_version || "Latest"}</Text>
-                        </View>
-
-                        <TouchableOpacity 
-                            style={[styles.updateButton, styles.primaryBtn]} 
-                            onPress={() => Linking.openURL(updateData?.play_store_url)}
-                        >
-                            <Text style={styles.primaryBtnText}>Update via Play Store</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity 
-                            style={[styles.updateButton, styles.secondaryBtn]} 
-                            onPress={() => Linking.openURL(updateData?.website_url)}
-                        >
-                            <Text style={styles.secondaryBtnText}>Download directly from Website</Text>
-                        </TouchableOpacity>
-
-                        {/* "Maybe Later" button - only show if force_update is false */}
-                        {updateData && !updateData.force_update && (
-                            <TouchableOpacity 
-                                style={styles.dismissButton}
-                                onPress={handleDismissUpdate}
-                            >
-                                <Text style={styles.dismissButtonText}>Maybe Later</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
-            </Modal>
-        )}
+      )}
 
       <View style={styles.illustration}>
         <Image source={require('../assets/EduGraphics.png')} style={styles.illustrationimg} />
@@ -235,9 +257,15 @@ const HomePage = ({ navigation }) => {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
+    backgroundColor: '#fcfcfc',
+  },
+  loadingContentWrapper: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fcfcfc',
+    borderTopLeftRadius: 25,
+    marginTop: -25,
   },
   loadingText: {
     marginTop: 15,
@@ -297,7 +325,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fcfcfc',
     fontSize: 18,
-    fontWeight: 'bold', 
+    fontWeight: 'bold',
     fontFamily: 'latto',
   },
 

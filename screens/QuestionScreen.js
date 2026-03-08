@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, memo, useContext } from "react";
+import React, { createContext, useEffect, useState, useRef, memo, useContext } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import { BackgroundMusicContext } from "../context/BackgroundMusicProvider";
 import CalculatorModal from '../components/CalculatorModal';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { updateStatsWidget } from '../src/utils/widgetHelper';
+const IN_FLIGHT_MODE = true;
 const Breadcrumb = memo(
   ({ currentQuestion }) => {
     if (!currentQuestion) return null;
@@ -382,12 +383,12 @@ const RoughSheet = ({ visible, onClose }) => {
   const [currentPath, setCurrentPath] = useState("");
   const [isDrawing, setIsDrawing] = useState(false);
 
-  console.log('🎨 RoughSheet render:', {
-    visible,
-    pathCount: paths.length,
-    isDrawing,
-    currentPathLength: currentPath.length
-  });
+  // console.log('🎨 RoughSheet render:', {
+  //   visible,
+  //   pathCount: paths.length,
+  //   isDrawing,
+  //   currentPathLength: currentPath.length
+  // });
 
   const handleTouchStart = (evt) => {
     console.log('👆 handleTouchStart called');
@@ -533,6 +534,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [streaks, setStreaks] = useState(0);
   const [stars, setStars] = useState(0);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [userStatus, setUserStatus] = useState('free'); // Default to free for safety
   const {
     // Standard params
     subtopicId,
@@ -583,6 +585,46 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   //   examId
   // }, null, 2));
   // Timer effect — countdown for school work, count-up otherwise
+
+
+  const fetchUserProfile = async () => {
+    console.log("🚦 1. fetchUserProfile started!");
+    try {
+      // Grab your saved auth token
+      const token = await AsyncStorage.getItem('token');
+      console.log("🔑 2. Token retrieved:", token ? "Token exists" : "TOKEN IS NULL!");
+      console.log("🌐 3. Making API request...");
+
+      const response = await fetch('https://homeedu.fsdgroup.com.ng/api/user', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log("✅ 4. Server responded with status:", response.status);
+
+      // Read the stream ONCE
+      const rawText = await response.text();
+      console.log("📄 5. Raw server response:", rawText);
+
+      // Parse the raw string into a JSON object
+      if (rawText) {
+        const json = JSON.parse(rawText);
+        console.log("🎉 6. Parsed JSON:", json);
+
+        if (json.status === 200) {
+          setUserStatus(json.userData.status);
+        } else {
+          console.log("Failed to fetch user:", json.message);
+        }
+      }
+
+    } catch (error) {
+      console.error("Error pulling user profile:", error);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -873,6 +915,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
       }
     };
     fetchQuestions();
+    fetchUserProfile();
   }, [userData]);
 
   // 2. Add this useEffect to trigger the shake logic
@@ -1491,27 +1534,64 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
         onClose={() => setCalculatorVisible(false)}
         userClass={userData?.class}
       />
-
       <Modal
         transparent={true}
         visible={showThanksModal}
-        animationType="slide" // Slide feels more "mechanical" for neo-brutalism
+        animationType="slide"
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Neo-Brutalist Icon Container */}
-            <View style={styles.iconContainer}>
-              <Text style={{ fontSize: 40 }}>🎉</Text>
-            </View>
 
-            <Text style={styles.thanksText}>Thanks for the practice!</Text>
+            {/* Determine if we should show the upsell based on In-Flight status AND user status */}
+            {(!IN_FLIGHT_MODE && (userStatus === 'free' || userStatus === 'beta')) ? (
 
-            <Text style={styles.subText}>
-              Keep going! Every question makes you sharper.
-            </Text>
+              /* 🚨 THE PREMIUM UPSELL UI (Hidden during review) 🚨 */
+              <>
+                <View style={styles.iconContainer}>
+                  <Text style={{ fontSize: 40 }}>🔒</Text>
+                </View>
+                <Text style={styles.thanksText}>Thanks for the practice!</Text>
 
+                <View style={styles.upsellBox}>
+                  <Text style={styles.upsellTitle}>🚀 UNLOCK PREMIUM</Text>
+                  <View style={styles.upsellList}>
+                    <Text style={styles.upsellItem}>⭐ Answer more than 6 questions</Text>
+                    <Text style={styles.upsellItem}>🏆 Join the Global Leaderboard</Text>
+                    <Text style={styles.upsellItem}>📊 Unlock detailed performance reports</Text>
+                    <Text style={styles.upsellItem}>🧠 Get step-by-step explanations</Text>
+                    <Text style={styles.upsellItem}>📩 Send weekly reports to parents</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.upgradeBtn}
+                    onPress={() => {
+                      setShowThanksModal(false);
+                      navigation.navigate("Subscription");
+                    }}
+                  >
+                    <Text style={styles.upgradeBtnText}>UPGRADE NOW</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+
+            ) : (
+
+              /* 🟢 THE SAFE UI (Shown during review OR to paid users) 🟢 */
+              <>
+                <View style={styles.iconContainer}>
+                  <Text style={{ fontSize: 40 }}>🎉</Text>
+                </View>
+                <Text style={styles.thanksText}>Thanks for the practice!</Text>
+                <Text style={styles.subText}>
+                  Keep going! Every question makes you sharper.
+                </Text>
+              </>
+
+            )}
+
+            {/* Default Navigation Buttons (Always visible) */}
             <TouchableOpacity
-              style={styles.cancelBtn}
+              style={styles.modalButton}
               onPress={() => {
                 setShowThanksModal(false);
                 navigation.reset({
@@ -1520,22 +1600,24 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
                 });
               }}
             >
-              <Text style={styles.cancelBtnText}>BACK TO DASHBOARD</Text>
+              <Text style={styles.modalButtonText}>BACK TO DASHBOARD</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               style={[
                 styles.modalButton,
-                { backgroundColor: "#FFFFFF", marginTop: 10 },
-              ]} // White bg for contrast
+                { backgroundColor: "#12b876", marginTop: 10 },
+              ]}
               onPress={() => {
-                setIsModalVisible(false);
-                navigation.goBack(); // <--- Pops the Question screen, returning
+                setShowThanksModal(false);
+                navigation.goBack();
               }}
             >
-              <Text style={[styles.modalButtonText, { color: "#000000" }]}>
+              <Text style={[styles.modalButtonText, { color: "#fefefe" }]}>
                 🔙 BACK
               </Text>
             </TouchableOpacity>
+
           </View>
         </View>
       </Modal>
@@ -1926,10 +2008,11 @@ const styles = StyleSheet.create({
   modalButton: {
     backgroundColor: "#864AF9",
     paddingVertical: 16,
-    paddingHorizontal: 30,
+    paddingHorizontal: 10, // 👈 REDUCED FROM 30. Gives the text room to breathe.
     borderRadius: 12,
     width: "100%",
     alignItems: "center",
+    justifyContent: "center", // 👈 ADD THIS to perfectly center content vertically
     borderWidth: 2,
     borderColor: "#000",
     shadowColor: "#000",
@@ -1940,9 +2023,10 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: "#fff",
     fontWeight: "900",
-    fontSize: 16,
+    fontSize: 16, // If it still breaks on tiny phones, try dropping this to 15
     textTransform: "uppercase",
     letterSpacing: 1,
+    textAlign: "center", // 👈 ADD THIS to force center alignment
   },
   modalButtonSecondary: {
     backgroundColor: "#F7F9FC",
@@ -2383,6 +2467,52 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 14,
     textDecorationLine: "underline",
+  },
+  // Add these to your existing styles object
+  upsellBox: {
+    backgroundColor: "#FBBF24", // Hard warning yellow
+    borderWidth: 3,
+    borderColor: "#000000",
+    borderRadius: 12,
+    padding: 15,
+    marginVertical: 15,
+    width: '100%',
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
+  },
+  upsellTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#000000",
+    textTransform: "uppercase",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  upsellList: {
+    marginBottom: 15,
+  },
+  upsellItem: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2D3748",
+    marginBottom: 6,
+  },
+  upgradeBtn: {
+    backgroundColor: "#864AF9", // Your primary purple
+    borderWidth: 2,
+    borderColor: "#000000",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  upgradeBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 16,
+    letterSpacing: 1,
   },
 });
 

@@ -16,7 +16,8 @@ import {
   Platform,
   Alert,
   Modal,
-  FlatList
+  FlatList,
+  Linking
 } from "react-native";
 import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,7 +35,7 @@ import JoinSchoolModal from '../components/JoinMySchool';
 import ParentEmailCheck from '../components/ParentModal';
 const { width } = Dimensions.get("window");
 import { updateStatsWidget } from '../src/utils/widgetHelper';
-
+import NeoAlert from '../components/NeoAlert'
 const InputField = ({ label, value, onChange, isEditing, onToggle, keyboardType = 'default' }) => (
   <View style={styles.inputGroup}>
     <Text style={styles.modalLabel}>{label}</Text>
@@ -57,19 +58,153 @@ const InputField = ({ label, value, onChange, isEditing, onToggle, keyboardType 
   </View>
 );
 
+const SponsorshipBanner = ({ sponsorship }) => {
+  if (!sponsorship || !sponsorship.is_sponsored) return null;
+
+  const { politician, days_remaining, expires_at_formatted } = sponsorship;
+  const isExpiringSoon = days_remaining <= 7;
+
+  return (
+    <View style={sponsorBannerStyles.container}>
+      {/* Politician Photo */}
+      {politician.image && (
+        <Image
+          source={{ uri: politician.image }}
+          style={sponsorBannerStyles.photo}
+        />
+      )}
+
+      {/* Content */}
+      <View style={sponsorBannerStyles.content}>
+        <View style={sponsorBannerStyles.header}>
+          <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+          <Text style={sponsorBannerStyles.badge}>SPONSORED STUDENT</Text>
+        </View>
+
+        <Text style={sponsorBannerStyles.sponsorText}>
+          Sponsored by <Text style={sponsorBannerStyles.politicianName}>{politician.name}</Text>
+        </Text>
+
+        <Text style={sponsorBannerStyles.position}>
+          {politician.position} • {politician.constituency}
+        </Text>
+
+        <View style={[
+          sponsorBannerStyles.expiryContainer,
+          isExpiringSoon && sponsorBannerStyles.expiryWarning
+        ]}>
+          <Ionicons
+            name={isExpiringSoon ? "alert-circle" : "calendar"}
+            size={14}
+            color={isExpiringSoon ? "#DC2626" : "#6B7280"}
+          />
+          <Text style={[
+            sponsorBannerStyles.expiryText,
+            isExpiringSoon && sponsorBannerStyles.expiryTextWarning
+          ]}>
+            {days_remaining} days remaining • Expires {expires_at_formatted}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const sponsorBannerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#864AF9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  photo: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 3,
+    borderColor: '#864AF9',
+    marginRight: 12,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  badge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#10B981',
+    marginLeft: 5,
+    letterSpacing: 0.5,
+  },
+  sponsorText: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 3,
+  },
+  politicianName: {
+    fontWeight: '700',
+    color: '#864AF9',
+    fontSize: 14,
+  },
+  position: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  expiryContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  expiryWarning: {
+    backgroundColor: '#FEE2E2',
+  },
+  expiryText: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginLeft: 5,
+    fontWeight: '600',
+  },
+  expiryTextWarning: {
+    color: '#DC2626',
+  },
+});
+
 const DashboardContent = ({ route, navigation }) => {
   const { start, canStart, stop, isActive, scrollViewRef } = useTutorial();
   const { isMuted, toggleMute } = useContext(BackgroundMusicContext);
   const tutorialHasStarted = useRef(false);
   const { userData, setUserData } = useUser();
-
+  const [sponsorship, setSponsorship] = useState(null);
   const [activeScreenTab, setActiveScreenTab] = useState("dashboard");
   const [musicPacks, setMusicPacks] = useState([]);
   const [loadingPackages, setLoadingPackages] = useState(false);
   const [downloadingPackId, setDownloadingPackId] = useState(null);
   const [downloadStatus, setDownloadStatus] = useState("");
   const [downloadedPacks, setDownloadedPacks] = useState([]);
-
+  const [neoAlertConfig, setNeoAlertConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    buttons: []
+  });
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -110,6 +245,23 @@ const DashboardContent = ({ route, navigation }) => {
   const [SchoolmodalVisible, setSchoolModalVisible] = useState(false);
   const [ParentModalVisible, setParentModalVisible] = useState(false);
 
+  useEffect(() => {
+    loadSponsorshipData();
+  }, []);
+
+  const loadSponsorshipData = async () => {
+    try {
+      const sponsorshipData = await AsyncStorage.getItem('sponsorship');
+      if (sponsorshipData) {
+        const parsed = JSON.parse(sponsorshipData);
+        if (parsed && parsed.is_sponsored) {
+          setSponsorship(parsed);
+        }
+      }
+    } catch (error) {
+      console.log('Error loading sponsorship data:', error);
+    }
+  };
 
   // Helper: Open picker for specific side (Start or End)
   const openTimePicker = (index, fullTimeString, type) => {
@@ -188,41 +340,71 @@ const DashboardContent = ({ route, navigation }) => {
   };
 
 
-useEffect(() => {
-  const setupServices = async () => {
-    if (!userData) return;
+  // ✅ FIXED: Only setup notifications once when component mounts
+  const notificationSetupDone = useRef(false);
+  const notificationTimeout = useRef(null);
 
-    const hasPermission = await NotificationService.registerForPushNotifications();
-
-    if (hasPermission) {
-      // ✅ Use the master reschedule function to avoid conflicts
-      await NotificationService.rescheduleAll(streaks, stars, subjects);
-    }
-    
-    // ✅ Update widget with correct values
-    await updateStatsWidget(streaks, stars);
-  };
-
-  setupServices();
-}, [userData, streaks, stars, subjects]); // ✅ Added stars dependency
-  // Tutorial startup logic
   useEffect(() => {
-    const runTutorial = async () => {
-      if (tutorialHasStarted.current) return;
-      try {
-        const hasSeenTutorial = await AsyncStorage.getItem('hasSeenDashboardTutorial');
-        if (hasSeenTutorial !== 'true' && canStart && userData) {
-          tutorialHasStarted.current = true;
-          setTimeout(() => {
-            start();
-          }, 1000);
+    const setupServices = async () => {
+      // Prevent multiple calls
+      if (!userData || notificationSetupDone.current) return;
+
+      // Clear any pending timeout
+      if (notificationTimeout.current) {
+        clearTimeout(notificationTimeout.current);
+      }
+
+      // Debounce: Wait 500ms before actually scheduling
+      // This prevents multiple calls if data loads quickly
+      notificationTimeout.current = setTimeout(async () => {
+        const hasPermission = await NotificationService.registerForPushNotifications();
+
+        if (hasPermission) {
+          // ✅ Use the master reschedule function to avoid conflicts
+          await NotificationService.rescheduleAll(streaks, userStars, subjects);
+          notificationSetupDone.current = true; // Mark as done
+          console.log('✅ Notifications scheduled successfully');
         }
-      } catch (error) {
-        console.log('❌ Tutorial setup error:', error);
+
+        // ✅ Update widget with correct values
+        await updateStatsWidget(streaks, userStars);
+      }, 500);
+    };
+
+    setupServices();
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (notificationTimeout.current) {
+        clearTimeout(notificationTimeout.current);
       }
     };
-    runTutorial();
-  }, [canStart, userData, start]);
+  }, [userData]); // ✅ Only run when userData changes (on mount)
+
+  // ✅ NEW: Separate effect to update widget when stats change
+  useEffect(() => {
+    if (notificationSetupDone.current) {
+      updateStatsWidget(streaks, userStars);
+    }
+  }, [streaks, userStars]); // Only update widget, don't reschedule notifications
+  // Tutorial startup logic
+  // useEffect(() => {
+  //   const runTutorial = async () => {
+  //     if (tutorialHasStarted.current) return;
+  //     try {
+  //       const hasSeenTutorial = true;
+  //       if (hasSeenTutorial !== 'true' && canStart && userData) {
+  //         tutorialHasStarted.current = true;
+  //         setTimeout(() => {
+  //           start();
+  //         }, 1000);
+  //       }
+  //     } catch (error) {
+  //       console.log('❌ Tutorial setup error:', error);
+  //     }
+  //   };
+  //   runTutorial();
+  // }, [canStart, userData, start]);
 
   // Save tutorial completion
   useEffect(() => {
@@ -292,27 +474,27 @@ useEffect(() => {
     }
   }, [userData?.username]);
 
-useFocusEffect(
-  useCallback(() => {
-    const fetchStreaks = async () => {
-      try {
-        if (!userData) return;
-        const id = userData?.username;
-        const response = await axios.get(
-          `https://homeedu.fsdgroup.com.ng/api/streaks?username=${id}`
-        );
-        const streakCount = response.data.streak_count || 0;
-        setStreaks(streakCount);
-        
-        // Update widget with new streak count
-        await updateStatsWidget(streakCount, userStars);
-      } catch (error) {
-        console.error("Error fetching streaks:", error);
-      }
-    };
-    fetchStreaks();
-  }, [userData, userStars]) // Add userStars as dependency
-);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchStreaks = async () => {
+        try {
+          if (!userData) return;
+          const id = userData?.username;
+          const response = await axios.get(
+            `https://homeedu.fsdgroup.com.ng/api/streaks?username=${id}`
+          );
+          const streakCount = response.data.streak_count || 0;
+          setStreaks(streakCount);
+
+          // Update widget with new streak count
+          await updateStatsWidget(streakCount, userStars);
+        } catch (error) {
+          console.error("Error fetching streaks:", error);
+        }
+      };
+      fetchStreaks();
+    }, [userData, userStars]) // Add userStars as dependency
+  );
 
 
   const checkExistingDownloads = async (packs) => {
@@ -533,36 +715,36 @@ useFocusEffect(
     }
   };
 
-const fetchLeaderboard = async () => {
-  try {
-    const formData = new FormData();
-    formData.append("class", userData?.class);
+  const fetchLeaderboard = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("class", userData?.class);
 
-    const response = await fetch(
-      `https://homeedu.fsdgroup.com.ng/api/getleaderboard/${userData?.username}`,
-      { method: "POST", body: formData }
-    );
+      const response = await fetch(
+        `https://homeedu.fsdgroup.com.ng/api/getleaderboard/${userData?.username}`,
+        { method: "POST", body: formData }
+      );
 
-    const json = await response.json();
-    if (json.status === 200) {
-      setLeaderboard(json.data);
-      
-      // Extract current user's stars from leaderboard
-      const currentUser = json.data.find(user => user.username === userData?.username);
-      const stars = currentUser?.stars || currentUser?.total_stars || 0;
-      setUserStars(stars);
-      
-      // Update widget with new star count
-      await updateStatsWidget(streaks, stars);
-    } else {
-      setLeaderboard([]);
+      const json = await response.json();
+      if (json.status === 200) {
+        setLeaderboard(json.data);
+
+        // Extract current user's stars from leaderboard
+        const currentUser = json.data.find(user => user.username === userData?.username);
+        const stars = currentUser?.stars || currentUser?.total_stars || 0;
+        setUserStars(stars);
+
+        // Update widget with new star count
+        await updateStatsWidget(streaks, stars);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const truncateText = (text, max = 18) => {
     if (!text) return null;
@@ -582,13 +764,25 @@ const fetchLeaderboard = async () => {
   const toggleEditName = async () => {
     if (isEditingName) {
       try {
+        // 1. Get Token
+        const token = await AsyncStorage.getItem("token");
+
         const formData = new FormData();
         formData.append("fullname", tempFullName);
         formData.append("username", userData?.username);
+
         const response = await fetch(
           "https://homeedu.fsdgroup.com.ng/api/editname",
-          { method: "POST", body: formData }
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`, // ✅ Token Added
+              Accept: "application/json",
+            },
+            body: formData,
+          }
         );
+
         if (response.status === 200) {
           const updatedUser = { ...userData, fullName: tempFullName };
           setUserData(updatedUser);
@@ -608,14 +802,25 @@ const fetchLeaderboard = async () => {
   };
 
   const saveUsername = async () => {
-    const formData = new FormData();
-    formData.append("old_username", userData?.username);
-    formData.append("new_username", tempUsername);
     try {
+      const token = await AsyncStorage.getItem("token"); // ✅ Get Token
+
+      const formData = new FormData();
+      formData.append("old_username", userData?.username);
+      formData.append("new_username", tempUsername);
+
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editusername",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`, // ✅ Token Added
+            Accept: "application/json",
+          },
+          body: formData,
+        }
       );
+
       const data = await response.json();
       if (response.ok && data.status === 200) {
         const updatedUser = { ...userData, username: tempUsername };
@@ -634,14 +839,25 @@ const fetchLeaderboard = async () => {
   };
 
   const saveEmail = async () => {
-    const formData = new FormData();
-    formData.append("username", userData?.username);
-    formData.append("email", tempEmail);
     try {
+      const token = await AsyncStorage.getItem("token"); // ✅ Get Token
+
+      const formData = new FormData();
+      formData.append("username", userData?.username);
+      formData.append("email", tempEmail);
+
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editemail",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`, // ✅ Token Added
+            Accept: "application/json",
+          },
+          body: formData,
+        }
       );
+
       if (response.ok) {
         const updatedUser = { ...userData, email: tempEmail };
         setUserData(updatedUser);
@@ -659,14 +875,25 @@ const fetchLeaderboard = async () => {
   };
 
   const savePhone = async () => {
-    const formData = new FormData();
-    formData.append("username", userData?.username);
-    formData.append("phone", tempPhone);
     try {
+      const token = await AsyncStorage.getItem("token"); // ✅ Get Token
+
+      const formData = new FormData();
+      formData.append("username", userData?.username);
+      formData.append("phone", tempPhone);
+
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editphone",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`, // ✅ Token Added
+            Accept: "application/json",
+          },
+          body: formData,
+        }
       );
+
       if (response.ok) {
         const updatedUser = { ...userData, phoneNumber: tempPhone };
         setUserData(updatedUser);
@@ -682,14 +909,25 @@ const fetchLeaderboard = async () => {
   };
 
   const saveClass = async () => {
-    const formData = new FormData();
-    formData.append("username", userData?.username);
-    formData.append("class", tempClass);
     try {
+      const token = await AsyncStorage.getItem("token"); // ✅ Get Token
+
+      const formData = new FormData();
+      formData.append("username", userData?.username);
+      formData.append("class", tempClass);
+
       const response = await fetch(
         "https://homeedu.fsdgroup.com.ng/api/editclass",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`, // ✅ Token Added
+            Accept: "application/json",
+          },
+          body: formData,
+        }
       );
+
       if (response.ok) {
         const updatedUser = { ...userData, class: tempClass };
         setUserData(updatedUser);
@@ -706,9 +944,13 @@ const fetchLeaderboard = async () => {
 
   const pickImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permissionResult.granted === false) {
-        Alert.alert("Permission Required", "Permission to access gallery is required!");
+        Alert.alert(
+          "Permission Required",
+          "Permission to access gallery is required!"
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -729,11 +971,18 @@ const fetchLeaderboard = async () => {
       Alert.alert("Error", "Missing username or image data.");
       return;
     }
+
+    // 1. Get Token inside the function
+    const token = await AsyncStorage.getItem("token");
+
     setIsUploadingImage(true);
     setUploadProgress(0);
-    const cleanUri = Platform.OS === "ios" ? image.uri.replace("file://", "") : image.uri;
+
+    const cleanUri =
+      Platform.OS === "ios" ? image.uri.replace("file://", "") : image.uri;
     const fileName = image.uri.split("/").pop();
     const fileType = fileName.endsWith(".png") ? "image/png" : "image/jpeg";
+
     const formData = new FormData();
     formData.append("username", userData?.username);
     formData.append("profile_image", {
@@ -741,9 +990,17 @@ const fetchLeaderboard = async () => {
       name: fileName,
       type: fileType,
     });
+
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "https://homeedu.fsdgroup.com.ng/api/EditProfileImage");
+    xhr.open(
+      "POST",
+      "https://homeedu.fsdgroup.com.ng/api/EditProfileImage"
+    );
+
+    // 2. Set Headers for XHR
     xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`); // ✅ Token Added
+
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
         let percent = Math.round((event.loaded / event.total) * 100);
@@ -751,6 +1008,7 @@ const fetchLeaderboard = async () => {
         setUploadProgress(percent);
       }
     };
+
     xhr.onload = async () => {
       try {
         const responseData = JSON.parse(xhr.responseText);
@@ -761,13 +1019,16 @@ const fetchLeaderboard = async () => {
           const updatedUser = {
             ...userData,
             avatar: remoteUrl,
-            localAvatar: localUri
+            localAvatar: localUri,
           };
           setUserData(updatedUser);
           await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
           Alert.alert("Success", "Profile Image Updated!");
         } else {
-          Alert.alert("Error", "Upload Failed: " + (responseData.message || "Server Error"));
+          Alert.alert(
+            "Error",
+            "Upload Failed: " + (responseData.message || "Server Error")
+          );
         }
       } catch (e) {
         Alert.alert("Error", "Server returned an invalid response.");
@@ -776,11 +1037,13 @@ const fetchLeaderboard = async () => {
         setUploadProgress(0);
       }
     };
+
     xhr.onerror = (e) => {
       Alert.alert("Error", "Network Error: Could not upload image.");
       setIsUploadingImage(false);
       setUploadProgress(0);
     };
+
     xhr.send(formData);
   };
 
@@ -806,12 +1069,52 @@ const fetchLeaderboard = async () => {
       fetchLeaderboard();
       fetchReports();
       fetchSubjects();
+
       const response = await fetch("https://homeedu.fsdgroup.com.ng/api/refresh", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ username: userData?.username }),
       });
+
+      // Check for authentication errors (401 or 403)
+      if (response.status === 401 || response.status === 403) {
+        console.log("❌ Authentication failed - logging out user");
+        await handleLogout();
+        return;
+      }
+
+      // Check content type before parsing
+      const contentType = response.headers.get("content-type");
+
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Server returned non-JSON response:", text.substring(0, 200));
+
+        // Check if it's an authentication redirect (common with Laravel)
+        if (text.includes("login") || text.includes("unauthorized") || text.includes("unauthenticated")) {
+          console.log("❌ Detected authentication issue in response - logging out");
+          await handleLogout();
+          return;
+        }
+
+        throw new Error("Server returned invalid response format");
+      }
+
       const result = await response.json();
+
+      // Check for authentication errors in response
+      if (result.status === 401 || result.status === 403 ||
+        result.message === "Unauthenticated" ||
+        result.message === "Token expired" ||
+        result.message === "Unauthorized") {
+        console.log("❌ Authentication error in response - logging out");
+        await handleLogout();
+        return;
+      }
+
       if (response.ok && result.status === 200) {
         const remoteUrl = result.user.userData?.avatar;
         const localUri = await cacheImage(remoteUrl, userData?.username);
@@ -823,24 +1126,65 @@ const fetchLeaderboard = async () => {
         };
         setUserData(updatedUser);
         await AsyncStorage.setItem("userData", JSON.stringify(updatedUser));
+        if (result.sponsorship && result.sponsorship.is_sponsored) {
+          await AsyncStorage.setItem("sponsorship", JSON.stringify(result.sponsorship));
+          setSponsorship(result.sponsorship);
+        } else {
+          await AsyncStorage.removeItem("sponsorship");
+          setSponsorship(null);
+        }
+
+      } else {
+        console.error("Refresh failed:", result.message || "Unknown error");
       }
     } catch (error) {
       console.error("Refresh Error:", error);
+
+      // Check if error message indicates authentication issue
+      if (error.message?.toLowerCase().includes("unauthorized") ||
+        error.message?.toLowerCase().includes("unauthenticated")) {
+        await handleLogout();
+      }
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await AsyncStorage.removeItem("userData");
-      setUserData(null);
-      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-    } catch (error) {
-      Alert.alert("Error", "Error logging out.");
-    }
-  };
 
+
+const handleLogout = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    
+    // Tell server to logout (revoke token)
+    if (token) {
+      try {
+        await axios.post(
+          "https://homeedu.fsdgroup.com.ng/api/logout",
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token.replace(/"/g, '')}`,
+            },
+          }
+        );
+      } catch (error) {
+        console.log("Server logout failed:", error);
+        // Continue with local logout anyway
+      }
+    }
+
+    // Clear local data
+    await AsyncStorage.removeItem("userData");
+    await AsyncStorage.removeItem("token");
+    await AsyncStorage.removeItem("sponsorship");
+    
+    setUserData(null);
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  } catch (error) {
+    Alert.alert("Error", "Error logging out.");
+  }
+};
   const sections = useMemo(() => [
     { type: "info", id: 1, text: "This is your profile section. Tap here to view and edit your details!", name: "Profile" },
     { type: "streaks", id: 2, text: "Keep your learning streak alive! Practice daily to grow this number.", name: "Streaks" },
@@ -851,52 +1195,52 @@ const fetchLeaderboard = async () => {
   ], []);
 
   // ✅ MOVED THESE UP BEFORE THE `if (!userData)` CHECK
-useEffect(() => {
-  const loadTimetable = async () => {
-    try {
-      const saved = await AsyncStorage.getItem('customTimetable');
-      const classTimes = generateClassTimes();
+  useEffect(() => {
+    const loadTimetable = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('customTimetable');
+        const classTimes = generateClassTimes();
 
-      if (saved) {
-        const parsedData = JSON.parse(saved);
-        
-        // Validate saved data isn't empty/corrupted
-        if (parsedData && parsedData.length > 0) {
-          setTimetableData(parsedData);
-          return; // Exit early if we have valid saved data
+        if (saved) {
+          const parsedData = JSON.parse(saved);
+
+          // Validate saved data isn't empty/corrupted
+          if (parsedData && parsedData.length > 0) {
+            setTimetableData(parsedData);
+            return; // Exit early if we have valid saved data
+          }
         }
-      }
 
-      // If no saved data or invalid, generate from subjects
-      if (subjects && subjects.length > 0) {
-        const defaultData = subjects.slice(0, 3).map((sub, index) => ({
-          time: classTimes[index] || "00:00",
-          subject: sub?.Subject || "Free Period" // Add null safety
-        }));
-        setTimetableData(defaultData);
-      } else {
-        // Fallback to empty timetable
-        const emptyData = classTimes.slice(0, 3).map(time => ({ 
-          time, 
-          subject: "Free Period" 
-        }));
-        setTimetableData(emptyData);
-      }
-    } catch (e) {
-      console.error("❌ Error loading timetable:", e);
-      
-      // Fallback to safe default on error
-      const classTimes = generateClassTimes();
-      const safeDefault = classTimes.slice(0, 3).map(time => ({ 
-        time, 
-        subject: "Free Period" 
-      }));
-      setTimetableData(safeDefault);
-    }
-  };
+        // If no saved data or invalid, generate from subjects
+        if (subjects && subjects.length > 0) {
+          const defaultData = subjects.slice(0, 3).map((sub, index) => ({
+            time: classTimes[index] || "00:00",
+            subject: sub?.Subject || "Free Period" // Add null safety
+          }));
+          setTimetableData(defaultData);
+        } else {
+          // Fallback to empty timetable
+          const emptyData = classTimes.slice(0, 3).map(time => ({
+            time,
+            subject: "Free Period"
+          }));
+          setTimetableData(emptyData);
+        }
+      } catch (e) {
+        console.error("❌ Error loading timetable:", e);
 
-  loadTimetable();
-}, [subjects]); // This might cause issues if subjects is recreated
+        // Fallback to safe default on error
+        const classTimes = generateClassTimes();
+        const safeDefault = classTimes.slice(0, 3).map(time => ({
+          time,
+          subject: "Free Period"
+        }));
+        setTimetableData(safeDefault);
+      }
+    };
+
+    loadTimetable();
+  }, [subjects]); // This might cause issues if subjects is recreated
 
   const openTimetableEditor = () => {
     setTempTimetable(JSON.parse(JSON.stringify(timetableData)));
@@ -1369,6 +1713,10 @@ useEffect(() => {
             />
           }
         >
+          {/* 🎯 ADD THIS: Sponsorship Banner */}
+          <SponsorshipBanner sponsorship={sponsorship} />
+
+          {/* Existing sections */}
           {sections.map((section) => (
             <TutorialStep key={section.type} stepId={section.id}>
               {renderSectionContent(section)}
@@ -1499,10 +1847,36 @@ useEffect(() => {
                   <Text style={styles.cancelText}>CLOSE</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* --- NEW DELETE ACCOUNT BUTTON --- */}
+              {/* {Platform.OS === 'ios' && ( */}
+              <View style={{ paddingBottom: 30, width: '100%' }}>
+                <TouchableOpacity
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  style={{ marginTop: 24, paddingVertical: 12, width: '100%', alignItems: 'center' }}
+                  onPress={() => {
+                    // 1. Close the profile modal first!
+                    setShowProfileModal(false);
+
+                    // 2. Wait a tiny bit for the animation to finish, then navigate
+                    setTimeout(() => {
+                      navigation.navigate('Settings');
+                    }, 300);
+                  }}
+                >
+                  <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 16 }}>
+                    Delete Account
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {/* )} */}
+              {/* --------------------------------- */}
+
             </View>
           </ScrollView>
         </View>
       </Modal>
+
 
       <JoinSchoolModal
         isVisible={SchoolmodalVisible}
@@ -1511,7 +1885,13 @@ useEffect(() => {
       />
 
       <ParentEmailCheck />
-
+      <NeoAlert
+        visible={neoAlertConfig.visible}
+        title={neoAlertConfig.title}
+        message={neoAlertConfig.message}
+        buttons={neoAlertConfig.buttons}
+        onClose={() => setNeoAlertConfig({ ...neoAlertConfig, visible: false })}
+      />
       <Modal
         visible={modalVisible}
         transparent={true}
