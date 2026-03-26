@@ -5,17 +5,16 @@ import { useUser } from '../context/UserContext';
 
 const { width } = Dimensions.get('window');
 
-// Animated Subtopic Item Component
+// Animated Subtopic Item Component (Unchanged)
 const AnimatedSubtopicItem = ({ item, index, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Entrance animation when component mounts
   React.useEffect(() => {
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
-        delay: index * 100, // Stagger animation
+        delay: index * 100, 
         tension: 50,
         friction: 7,
         useNativeDriver: true,
@@ -29,7 +28,6 @@ const AnimatedSubtopicItem = ({ item, index, onPress }) => {
     ]).start();
   }, []);
 
-  // Press animation
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
       toValue: 0.95,
@@ -47,12 +45,7 @@ const AnimatedSubtopicItem = ({ item, index, onPress }) => {
   };
 
   return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ scale: scaleAnim }],
-      }}
-    >
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
         style={styles.subtopicItem}
         onPress={onPress}
@@ -66,12 +59,11 @@ const AnimatedSubtopicItem = ({ item, index, onPress }) => {
   );
 };
 
-// Animated Button Component
+// Animated Button Component (Unchanged)
 const AnimatedButton = ({ onPress, text }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Continuous pulse animation
   React.useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
@@ -108,11 +100,7 @@ const AnimatedButton = ({ onPress, text }) => {
   };
 
   return (
-    <Animated.View
-      style={{
-        transform: [{ scale: Animated.multiply(scaleAnim, pulseAnim) }],
-      }}
-    >
+    <Animated.View style={{ transform: [{ scale: Animated.multiply(scaleAnim, pulseAnim) }] }}>
       <TouchableOpacity
         style={styles.startButton}
         onPress={onPress}
@@ -128,7 +116,9 @@ const AnimatedButton = ({ onPress, text }) => {
 
 // Main SubtopicScreen Component
 const SubtopicScreen = ({ route, navigation }) => {
-  const { topicId, Topic, Subject } = route.params;
+  // 1. Destructure the offline params passed from TopicScreen
+  const { topicId, Topic, Subject, isOffline, offlineSubtopics } = route.params;
+  
   const [subtopics, setSubtopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -136,9 +126,22 @@ const SubtopicScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     const fetchSubtopics = async () => {
+      // 🛑 OFFLINE MODE: Bypass API and load directly from memory
+     if (isOffline && offlineSubtopics) {
+        console.log(`📦 APP STATUS: OFFLINE MODE -> Loading ${offlineSubtopics.length} subtopics directly from RAM`);
+        
+        // ⏳ UX Trick: Give the UI a moment to show the spinner
+        setTimeout(() => {
+          setSubtopics(offlineSubtopics);
+          setLoading(false);
+        }, 400); 
+        return;
+      }
+
+      // 🌐 ONLINE MODE: Fetch from API
+      console.log(`🌐 APP STATUS: ONLINE MODE -> Hitting the Laravel API for ${Topic} subtopics`);
       try {
         const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/userSubtopics/${topicId}`);
-        console.log("This is the response", response.data);
         if (response.data.status === 200) {
           setSubtopics(response.data.data);
         } else {
@@ -152,8 +155,9 @@ const SubtopicScreen = ({ route, navigation }) => {
     };
 
     fetchSubtopics();
-  }, [topicId]);
+  }, [topicId, isOffline, offlineSubtopics]);
 
+  // Handle Full Topic Exam Button
   const handleButtonPress = () => {
     navigation.navigate('Exam', {
       type: 'topicExam',
@@ -161,24 +165,38 @@ const SubtopicScreen = ({ route, navigation }) => {
       topic: Topic,
       topicId: topicId,
       subtopic: null,
-      userClass: userData.class,
+      userClass: userData?.class,
+      // 2. Pass offline data to the unified Exam screen
+      isOffline: isOffline || false,
+      offlineData: isOffline ? offlineSubtopics : null, 
     });
   };
 
-  const handleExplanation = (subtopicId, Subtopic) => {
-
-    // Define the fallback navigation params here to avoid duplication
+  // Handle Specific Subtopic Selection
+  const handleExplanation = (subtopicId, SubtopicTitle, fullSubtopicItem) => {
+    
     const navigateToQuestion = () => {
       navigation.navigate('Question', {
         subtopicId: subtopicId,
-        subtopic: Subtopic,
-        selectedSubjects: Subtopic,
+        subtopic: SubtopicTitle,
+        selectedSubjects: SubtopicTitle,
         type: 'subtopicExam',
-        subject: Subject, // Ensure this variable exists in your component scope
-        topic: Topic,   // Ensure this variable exists in your component scope
+        subject: Subject, 
+        topic: Topic,
+        // 3. Pass only the questions array down to the specific Question screen
+        isOffline: isOffline || false,
+        offlineQuestions: isOffline ? fullSubtopicItem.questions : null,
       });
     };
 
+    // 🛑 OFFLINE MODE: Skip the explanation API check completely
+    if (isOffline) {
+      console.log("📦 OFFLINE MODE: Skipping explanation API check. Going straight to questions.");
+      navigateToQuestion();
+      return; 
+    }
+
+    // 🌐 ONLINE MODE: Check for Explanation first
     const fetchExplanation = async () => {
       if (loading) return;
       setLoading(true);
@@ -188,27 +206,20 @@ const SubtopicScreen = ({ route, navigation }) => {
           `https://homeedu.fsdgroup.com.ng/api/explanation/${subtopicId}`
         );
 
-        // If we get a 200 OK, check if the data structure confirms success
         if (response.data && response.data.status === 200) {
           navigation.navigate('Explanation', {
             subtopicId: subtopicId,
-            Subtopic: Subtopic,
-            subject: Subject, // Ensure this variable exists in your component scope
-            topic: Topic,   // Ensure this variable exists in your component scope
+            Subtopic: SubtopicTitle,
+            subject: Subject,
+            topic: Topic, 
           });
         } else {
-          // If status is 200 but backend logic says "no data", go to questions
           navigateToQuestion();
         }
-
       } catch (err) {
-        // 1. Check if it is a 404 error
         if (err.response && err.response.status === 404) {
-          console.log("404 found: No explanation, redirecting to questions...");
           navigateToQuestion();
-        }
-        // 2. Handle actual errors (Network down, Server crash 500, etc)
-        else {
+        } else {
           console.error("Critical Error:", err);
           setError('An error occurred while fetching the explanation.');
         }
@@ -219,24 +230,28 @@ const SubtopicScreen = ({ route, navigation }) => {
 
     fetchExplanation();
   };
+
   if (loading) return <ActivityIndicator size="large" color="#864AF9" style={{ flex: 1, justifyContent: 'center' }} />;
   if (error) return <Text style={styles.errorText}>{error}</Text>;
 
   return (
     <View style={styles.subtopicsContainer}>
       <View style={styles.headerRow}>
-        <Text style={styles.subtopicsTitle}>Subtopics for {Topic}</Text>
+        <Text style={styles.subtopicsTitle}>
+          {isOffline ? '📦 ' : ''}Subtopics for {Topic}
+        </Text>
       </View>
 
       <FlatList
         data={subtopics}
-        keyExtractor={(item) => item.SubtopicId.toString()}
+        keyExtractor={(item) => item.SubtopicId ? item.SubtopicId.toString() : Math.random().toString()}
         renderItem={({ item, index }) => (
           <AnimatedSubtopicItem
             item={item}
             index={index}
             onPress={() =>
-              handleExplanation(item.SubtopicId, item.Subtopic)
+              // Pass the full `item` so we can extract the specific questions array if offline
+              handleExplanation(item.SubtopicId, item.Subtopic, item)
             }
           />
         )}
@@ -250,84 +265,15 @@ const SubtopicScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  subtopicsContainer: {
-    flex: 1,
-    backgroundColor: '#F8F9FE',
-    padding: 16,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  subtopicsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#2D3748',
-    letterSpacing: 0.3,
-    flex: 1,
-    flexShrink: 1,
-  },
-  subtopicsList: {
-    paddingBottom: 24,
-  },
-  subtopicItem: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 20,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    borderLeftWidth: 5,
-    borderLeftColor: '#864AF9',
-    marginBottom: 14,
-    shadowColor: '#864AF9',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  subtopicText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#2D3748',
-    letterSpacing: 0.2,
-    lineHeight: 24,
-  },
-  startButton: {
-    backgroundColor: '#864AF9',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-    shadowColor: '#864AF9',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  startButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#F56565',
-    textAlign: 'center',
-    marginTop: 20,
-  },
+  subtopicsContainer: { flex: 1, backgroundColor: '#F8F9FE', padding: 16 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  subtopicsTitle: { fontSize: 20, fontWeight: '700', color: '#2D3748', letterSpacing: 0.3, flex: 1, flexShrink: 1 },
+  subtopicsList: { paddingBottom: 24 },
+  subtopicItem: { backgroundColor: '#FFFFFF', paddingVertical: 20, paddingHorizontal: 18, borderRadius: 16, borderLeftWidth: 5, borderLeftColor: '#864AF9', marginBottom: 14, shadowColor: '#864AF9', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 4 },
+  subtopicText: { fontSize: 17, fontWeight: '600', color: '#2D3748', letterSpacing: 0.2, lineHeight: 24 },
+  startButton: { backgroundColor: '#864AF9', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 16, shadowColor: '#864AF9', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+  startButtonText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.5 },
+  errorText: { fontSize: 16, color: '#F56565', textAlign: 'center', marginTop: 20 },
 });
 
 export default SubtopicScreen;

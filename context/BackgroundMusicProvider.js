@@ -1,16 +1,13 @@
 import React, { createContext, useEffect, useState, useRef } from 'react';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import { AppState } from 'react-native';
 
 export const BackgroundMusicContext = createContext();
 
-// 1. Map Screens to Music Files
 const SCREEN_MUSIC_MAP = {
   Dashboard: 'Quiet Rooftop Sunrise.mp3',
-  Question: [
-    'Clockwork Curiosity.mp3',
-    'Sunrise Gbedu Cruise.mp3'
-  ],
+  Question: ['Clockwork Curiosity.mp3', 'Sunrise Gbedu Cruise.mp3'],
   Explanation: 'Rain On The Thinking Glass.mp3',
   Example: 'Rain On The Thinking Glass.mp3',
   Novel: 'Rain On The Thinking Glass.mp3',
@@ -24,23 +21,80 @@ const SCREEN_MUSIC_MAP = {
 };
 
 export const BackgroundMusicProvider = ({ children }) => {
-  // --- REFS ---
-  const soundObjectRef = useRef(null);   // Background Music
-  const memeSoundRef = useRef(null);     // Meme SFX
-  const isSwitchingRef = useRef(false);  
-  const pendingSongRef = useRef(null); 
+  const soundObjectRef = useRef(null);
+  const memeSoundRef = useRef(null);
+  const isSwitchingRef = useRef(false);
+  const currentSongRef = useRef(null);
+  const isAudioSetupRef = useRef(false);
+  const loadingTimeoutRef = useRef(null);
+  const isMutedRef = useRef(false); // ✅ NEW: Track mute state in ref
+  const isMemePausedRef = useRef(false); // ✅ NEW: Track if paused by meme
   
   const [currentSong, setCurrentSong] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
-  
-  // Maps
   const [songToPackMap, setSongToPackMap] = useState({});
-  const [memeCategories, setMemeCategories] = useState({ correct: [], wrong: [] }); // Stores list of meme files
+  const [memeCategories, setMemeCategories] = useState({ correct: [], wrong: [] });
   const [mapLoaded, setMapLoaded] = useState(false);
   
   const currentScreenRef = useRef(null);
+  const appState = useRef(AppState.currentState);
 
-  // 1. Fetch JSON and Build Maps
+  // ✅ Keep ref in sync with state
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  // Setup Audio Session Once
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          interruptionModeIOS: 1,
+          interruptionModeAndroid: 1,
+        });
+        isAudioSetupRef.current = true;
+      } catch (error) {
+        console.error("❌ Audio setup failed:", error);
+      }
+    };
+    setupAudio();
+  }, []);
+
+  // Handle app going to background/foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground - resume if not muted
+        if (soundObjectRef.current && !isMutedRef.current && !isMemePausedRef.current) {
+          try {
+            const status = await soundObjectRef.current.getStatusAsync();
+            if (status.isLoaded && !status.isPlaying) {
+              await soundObjectRef.current.playAsync();
+            }
+          } catch (e) {
+            console.log("Resume error:", e.message);
+          }
+        }
+      } else if (nextAppState.match(/inactive|background/)) {
+        // App going to background - pause
+        if (soundObjectRef.current) {
+          try {
+            await soundObjectRef.current.pauseAsync();
+          } catch (e) {}
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
+  // Fetch JSON and Build Maps
   useEffect(() => {
     const fetchMap = async () => {
       try {
@@ -54,11 +108,9 @@ export const BackgroundMusicProvider = ({ children }) => {
           json.packs.forEach(pack => {
             if (pack.files) {
               pack.files.forEach(file => {
-                // A. Handle Background Music Map
                 const key = file.name.endsWith('.mp3') ? file.name : `${file.name}.mp3`;
                 newSongMap[key] = pack.id;
 
-                // B. Handle Meme Categories 
                 if (pack.id === 'meme') {
                   if (file.category === 'correct_answer') {
                     newMemeCats.correct.push(file);
@@ -72,7 +124,7 @@ export const BackgroundMusicProvider = ({ children }) => {
         }
         
         setSongToPackMap(newSongMap);
-        setMemeCategories(newMemeCats); // Save categorized memes
+        setMemeCategories(newMemeCats);
         setMapLoaded(true);
       } catch (error) {
         console.error("❌ Error fetching music map:", error);
@@ -81,14 +133,12 @@ export const BackgroundMusicProvider = ({ children }) => {
     fetchMap();
   }, []);
 
-  // 2. Watch for Map Load
   useEffect(() => {
     if (mapLoaded && currentScreenRef.current) {
       handleScreenChange(currentScreenRef.current);
     }
   }, [mapLoaded]);
 
-  // --- BACKGROUND MUSIC LOGIC ---
   const handleScreenChange = async (currentRouteName) => {
     currentScreenRef.current = currentRouteName;
     let musicConfig = SCREEN_MUSIC_MAP[currentRouteName];
@@ -96,76 +146,162 @@ export const BackgroundMusicProvider = ({ children }) => {
 
     let selectedSong;
     if (Array.isArray(musicConfig)) {
-      if (musicConfig.includes(currentSong)) return; 
+      if (musicConfig.includes(currentSongRef.current)) return;
       selectedSong = musicConfig[Math.floor(Math.random() * musicConfig.length)];
     } else {
       selectedSong = musicConfig;
     }
 
-    if (currentSong === selectedSong) return;
+    if (currentSongRef.current === selectedSong) return;
     await safePlayMusic(selectedSong);
   };
 
   const safePlayMusic = async (fileName) => {
-    if (isSwitchingRef.current) {
-      pendingSongRef.current = fileName;
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+
+    if (!isAudioSetupRef.current) {
+      console.log("⏳ Waiting for audio setup...");
       return;
     }
 
+    if (isSwitchingRef.current) {
+      console.log("⏸️ Already switching, ignoring:", fileName);
+      return;
+    }
+
+    if (!mapLoaded) {
+      console.log("⏳ Map not loaded yet");
+      return;
+    }
+
+    if (currentSongRef.current === fileName && soundObjectRef.current) {
+      try {
+        const status = await soundObjectRef.current.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          console.log("✅ Already playing:", fileName);
+          return;
+        }
+      } catch (e) {
+        // Sound object might be corrupt, proceed with reload
+      }
+    }
+
     isSwitchingRef.current = true;
-    pendingSongRef.current = null;
+
+    loadingTimeoutRef.current = setTimeout(() => {
+      console.log("⚠️ Loading timeout, unlocking...");
+      isSwitchingRef.current = false;
+      loadingTimeoutRef.current = null;
+    }, 5000);
 
     try {
-      if (!mapLoaded) {
-        isSwitchingRef.current = false;
-        return;
-      }
-
       const packId = songToPackMap[fileName];
+      
       if (!packId) {
-        if (soundObjectRef.current) {
-          await soundObjectRef.current.unloadAsync();
-          soundObjectRef.current = null;
-        }
+        console.log("🛑 No pack for:", fileName);
+        await cleanupCurrentSound();
+        currentSongRef.current = null;
         setCurrentSong(null);
-        isSwitchingRef.current = false;
         return;
       }
 
-      const nameWithoutExt = fileName.replace('.mp3', ''); 
+      const nameWithoutExt = fileName.replace('.mp3', '');
       const safeName = nameWithoutExt.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".mp3";
       const localUri = `${FileSystem.documentDirectory}music_packs/${packId}/${safeName}`;
 
       const fileInfo = await FileSystem.getInfoAsync(localUri);
 
-      if (fileInfo.exists) {
-        if (soundObjectRef.current) {
-          try { await soundObjectRef.current.unloadAsync(); } catch (e) {}
-          soundObjectRef.current = null;
-        }
+      if (!fileInfo.exists) {
+        console.log("❌ File not found:", localUri);
+        await cleanupCurrentSound();
+        currentSongRef.current = null;
+        setCurrentSong(null);
+        return;
+      }
 
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: localUri },
-          { shouldPlay: !isMuted, isLooping: true, volume: 0.3 }
-        );
+      await cleanupCurrentSound();
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-        soundObjectRef.current = newSound;
-        setCurrentSong(fileName);
-      } 
+      console.log("🎵 Loading:", fileName);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: localUri },
+        { 
+          shouldPlay: !isMutedRef.current, // ✅ Use ref instead of state
+          isLooping: true, 
+          volume: 0.3,
+          progressUpdateIntervalMillis: 1000,
+        },
+        onPlaybackStatusUpdate
+      );
+
+      soundObjectRef.current = newSound;
+      currentSongRef.current = fileName;
+      setCurrentSong(fileName);
+      console.log("✅ Now playing:", fileName);
+
     } catch (error) {
       console.error("❌ Audio Error:", error);
+      await cleanupCurrentSound();
+      currentSongRef.current = null;
+      setCurrentSong(null);
     } finally {
-      isSwitchingRef.current = false;
-      if (pendingSongRef.current && pendingSongRef.current !== fileName) {
-        safePlayMusic(pendingSongRef.current);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
       }
+      isSwitchingRef.current = false;
     }
   };
 
-  // --- MEME SOUND LOGIC (NEW) ---
+  // ✅ FIXED: Monitor playback status with proper checks
+  const onPlaybackStatusUpdate = (status) => {
+    if (status.error) {
+      console.error("Playback error:", status.error);
+      cleanupCurrentSound();
+      currentSongRef.current = null;
+      setCurrentSong(null);
+      return;
+    }
+    
+    // ✅ CRITICAL FIX: Only restart if NOT muted and NOT paused by meme
+    if (status.isLoaded && 
+        !status.isPlaying && 
+        !status.isBuffering && 
+        !isMutedRef.current && // ✅ Check mute state
+        !isMemePausedRef.current && // ✅ Check if paused by meme
+        status.positionMillis > 0 // ✅ Only if it was actually playing (not just paused)
+    ) {
+      console.log("⚠️ Song stopped unexpectedly, attempting restart...");
+      setTimeout(async () => {
+        if (soundObjectRef.current && currentSongRef.current && !isMutedRef.current) {
+          try {
+            await soundObjectRef.current.playAsync();
+          } catch (e) {
+            console.log("Restart failed:", e.message);
+          }
+        }
+      }, 500);
+    }
+  };
+
+  const cleanupCurrentSound = async () => {
+    if (soundObjectRef.current) {
+      try {
+        soundObjectRef.current.setOnPlaybackStatusUpdate(null);
+        await soundObjectRef.current.stopAsync();
+        await soundObjectRef.current.unloadAsync();
+      } catch (e) {
+        console.log("Cleanup error (safe to ignore):", e.message);
+      }
+      soundObjectRef.current = null;
+    }
+  };
+
   const playMemeSound = async (type) => {
-    // type should be 'correct' or 'wrong'
-    if (isMuted) return;
+    if (isMutedRef.current) return; // ✅ Use ref
 
     const availableMemes = type === 'correct' ? memeCategories.correct : memeCategories.wrong;
     
@@ -174,76 +310,103 @@ export const BackgroundMusicProvider = ({ children }) => {
       return;
     }
 
-    // 1. Pick Random Meme
     const randomMeme = availableMemes[Math.floor(Math.random() * availableMemes.length)];
-    
-    // 2. Construct Path
-    // Note: The meme name from JSON might not have .mp3 in the 'name' field, but logic handles it
-    const nameWithoutExt = randomMeme.name.replace('.mp3', ''); 
+    const nameWithoutExt = randomMeme.name.replace('.mp3', '');
     const safeName = nameWithoutExt.replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".mp3";
     const localUri = `${FileSystem.documentDirectory}music_packs/meme/${safeName}`;
 
-    const fileInfo = await FileSystem.getInfoAsync(localUri);
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      if (!fileInfo.exists) {
+        console.log("Meme file not found:", safeName);
+        return;
+      }
 
-    if (fileInfo.exists) {
-      try {
-        // 3. Pause Background Music
-        if (soundObjectRef.current) {
-          await soundObjectRef.current.pauseAsync();
-        }
+      // ✅ Mark as paused by meme
+      isMemePausedRef.current = true;
 
-        // 4. Play Meme
-        // Unload previous meme if any
-        if (memeSoundRef.current) {
+      // Pause background
+      if (soundObjectRef.current) {
+        await soundObjectRef.current.pauseAsync();
+      }
+
+      // Cleanup previous meme
+      if (memeSoundRef.current) {
+        try {
           await memeSoundRef.current.unloadAsync();
-        }
+        } catch (e) {}
+        memeSoundRef.current = null;
+      }
 
-        const { sound: memeSound } = await Audio.Sound.createAsync(
-          { uri: localUri },
-          { shouldPlay: true, volume: 0.2 } // Memes usually louder
-        );
-        
-        memeSoundRef.current = memeSound;
+      // Play meme
+      const { sound: memeSound } = await Audio.Sound.createAsync(
+        { uri: localUri },
+        { shouldPlay: true, volume: 0.5 }
+      );
+      
+      memeSoundRef.current = memeSound;
 
-        // 5. Resume Background when Meme finishes
-        memeSound.setOnPlaybackStatusUpdate(async (status) => {
-          if (status.didJustFinish) {
-            // Meme done, resume background
-            if (soundObjectRef.current && !isMuted) {
+      // Resume background when done
+      memeSound.setOnPlaybackStatusUpdate(async (status) => {
+        if (status.didJustFinish) {
+          try {
+            // ✅ Unmark meme pause
+            isMemePausedRef.current = false;
+
+            if (soundObjectRef.current && !isMutedRef.current) {
               await soundObjectRef.current.playAsync();
             }
-            // Cleanup meme
             await memeSound.unloadAsync();
+            memeSoundRef.current = null;
+          } catch (e) {
+            console.log("Meme cleanup error:", e.message);
+            isMemePausedRef.current = false; // ✅ Ensure we unmark even on error
           }
-        });
+        }
+      });
 
-      } catch (error) {
-        console.error("Meme Playback Error:", error);
-        // If fail, ensure background resumes
-        if (soundObjectRef.current) await soundObjectRef.current.playAsync();
+    } catch (error) {
+      console.error("Meme Playback Error:", error);
+      isMemePausedRef.current = false; // ✅ Unmark on error
+      if (soundObjectRef.current && !isMutedRef.current) {
+        try {
+          await soundObjectRef.current.playAsync();
+        } catch (e) {}
       }
-    } else {
-      console.log("Meme pack not downloaded yet.");
     }
   };
 
   const toggleMute = async () => {
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    isMutedRef.current = newMutedState; // ✅ Update ref immediately
+
     if (soundObjectRef.current) {
       try {
-        if (isMuted) {
-          await soundObjectRef.current.playAsync();
-        } else {
+        if (newMutedState) {
           await soundObjectRef.current.pauseAsync();
+          console.log("🔇 Muted");
+        } else {
+          await soundObjectRef.current.playAsync();
+          console.log("🔊 Unmuted");
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log("Toggle mute error:", e.message);
+      }
     }
-    setIsMuted(!isMuted);
   };
 
   useEffect(() => {
     return () => {
-      if (soundObjectRef.current) soundObjectRef.current.unloadAsync();
-      if (memeSoundRef.current) memeSoundRef.current.unloadAsync();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      cleanupCurrentSound();
+      if (memeSoundRef.current) {
+        try {
+          memeSoundRef.current.unloadAsync();
+        } catch (e) {}
+      }
     };
   }, []);
 

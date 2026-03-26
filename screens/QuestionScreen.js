@@ -539,17 +539,22 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
     // Standard params
     subtopicId,
     subtopic,
-    selectedSubjects = [], // Default to empty array to prevent crashes
+    selectedSubjects = [],
     type,
     subject,
     topic,
     examId,
 
-    // NEW: Teacher Exam Params (Sent from InstructionScreen)
+    // NEW: Teacher Exam Params
     title,
     duration,
-    instructions = {}, // Default to empty object
+    instructions = {},
     userClass,
+
+    // 📦 NEW: Offline Params
+    isOffline,
+    offlineData,
+    offlineQuestions
   } = route.params;
   const [unansweredModalVisible, setUnansweredModalVisible] = useState(false);
   const [unansweredQuestions, setUnansweredQuestions] = useState([]);
@@ -589,6 +594,15 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
   const fetchUserProfile = async () => {
     console.log("🚦 1. fetchUserProfile started!");
+
+    // 🛑 OFFLINE MODE INTERCEPTOR
+    if (isOffline) {
+      console.log("📦 2. APP IS OFFLINE -> Skipping API and using cached user context.");
+      // Fallback safely to whatever status is already in the UserContext
+      setUserStatus(userData?.status || 'free');
+      return; // Exit the function immediately so it never tries to use 'fetch'
+    }
+
     try {
       // Grab your saved auth token
       const token = await AsyncStorage.getItem('token');
@@ -607,15 +621,18 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
       // Read the stream ONCE
       const rawText = await response.text();
-      console.log("📄 5. Raw server response:", rawText);
+      // console.log("📄 5. Raw server response:", rawText);
 
       // Parse the raw string into a JSON object
       if (rawText) {
         const json = JSON.parse(rawText);
-        console.log("🎉 6. Parsed JSON:", json);
+        console.log("🎉 6. Parsed JSON Profile successfully.");
 
         if (json.status === 200) {
           setUserStatus(json.userData.status);
+
+          // Optional Pro-Tip: Update your UserContext here too if you have a setUserData function!
+          // setUserData(json.userData); 
         } else {
           console.log("Failed to fetch user:", json.message);
         }
@@ -623,6 +640,8 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
     } catch (error) {
       console.error("Error pulling user profile:", error);
+      // Failsafe just in case they lose connection right as the screen loads
+      setUserStatus(userData?.status || 'free');
     }
   };
 
@@ -756,131 +775,131 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
       console.log("=== Fetch Questions Function Triggered ===");
 
       try {
-        // Step 1: Initialize payload
-        let payload = { class: userData.class };
-        console.log("Initial Payload:", payload);
+        let rawQuestions = []; // This will hold our questions before option parsing
 
-        // Step 2: Log navigation params
-        console.log("Navigation Params:", {
-          subtopicId,
-          subtopic,
-          selectedSubjects,
-          type,
-          subject,
-          topic,
-        });
 
-        // Step 3: Build payload based on exam type
-        switch (type) {
-          case "JAMB":
-            console.log("Exam Type: JAMB");
-            if (selectedSubjects.length > 0) {
-              payload.JAMB_SUBJECT = selectedSubjects.join(",");
+        // ==========================================
+        // 📦 OFFLINE MODE INTERCEPTOR
+        // ==========================================
+        if (isOffline) {
+          console.log(`📦 APP STATUS: OFFLINE MODE -> Extracting questions for ${type}`);
+
+          let extracted = [];
+
+          if (type === 'subtopicExam' && offlineQuestions) {
+            // FIX: Create a shallow copy so it's not read-only!
+            extracted = [...offlineQuestions];
+          }
+          else if (type === 'topicExam' && offlineData) {
+            offlineData.forEach(sub => {
+              if (sub.questions) extracted = [...extracted, ...sub.questions];
+            });
+          }
+          else if (type === 'subjectExam' && offlineData) {
+            offlineData.forEach(top => {
+              if (top.subtopics) {
+                top.subtopics.forEach(sub => {
+                  if (sub.questions) extracted = [...extracted, ...sub.questions];
+                });
+              }
+            });
+          }
+
+          // FIX: Safely sort the copied array
+          extracted.sort(() => 0.5 - Math.random());
+
+          // Apply the same limits as your API payload
+          let limit = 10;
+          if (type === 'subjectExam') limit = 40;
+          if (type === 'topicExam') limit = 30;
+          if (type === 'subtopicExam') limit = 20;
+
+          rawQuestions = extracted.slice(0, limit);
+          console.log(`📦 Successfully loaded ${rawQuestions.length} offline questions.`);
+        }
+        // ==========================================
+        // 🌐 ONLINE MODE (STANDARD API FETCH)
+        // ==========================================
+        else {
+          console.log("🌐 APP STATUS: ONLINE MODE -> Building Payload");
+          let payload = { class: userData.class };
+
+          switch (type) {
+            case "JAMB":
+              if (selectedSubjects.length > 0) {
+                payload.JAMB_SUBJECT = selectedSubjects.join(",");
+                payload.total_questions = null;
+              }
+              break;
+            case "classExam":
+              payload.subject = subject;
+              payload.total_questions = 60;
+              break;
+            case "subjectExam":
+              payload.subject = subject;
+              payload.topic = topic;
+              payload.total_questions = 40;
+              break;
+            case "topicExam":
+              payload.subject = subject;
+              payload.topic = topic;
+              payload.subtopic = subtopic;
+              payload.total_questions = 30;
+              break;
+            case "subtopicExam":
+              payload.subject = subject;
+              payload.topic = topic;
+              payload.subtopic = subtopic;
+              payload.total_questions = 20;
+              break;
+            case "schoolWork":
+            case "DistrictWork":
+              payload.subject = "School Work";
+              payload.topic = subject;
+              payload.subtopic = title;
+              payload.class = userClass;
+              payload.subtopicId = subtopicId;
               payload.total_questions = null;
-              console.log("Updated Payload for JAMB:", payload);
+              break;
+            default:
+              payload.total_questions = 10;
+          }
+
+          const token = await AsyncStorage.getItem('token');
+          const cleanToken = token ? token.replace(/"/g, '') : '';
+
+          const response = await axios.post(
+            `https://homeedu.fsdgroup.com.ng/api/ExamQuestions`,
+            payload,
+            {
+              headers: {
+                'Authorization': `Bearer ${cleanToken}`,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              }
             }
-            break;
+          );
 
-          case "classExam":
-            console.log("Exam Type: Class Exam");
-            payload.subject = subject;
-            payload.total_questions = 60;
-            console.log("Updated Payload for Class Exam:", payload);
-            break;
-
-          case "subjectExam":
-            console.log("Exam Type: Subject Exam");
-            payload.subject = subject;
-            payload.topic = topic;
-            payload.total_questions = 40;
-            console.log("Updated Payload for Subject Exam:", payload);
-            break;
-
-          case "topicExam":
-            console.log("Exam Type: Topic Exam");
-            payload.subject = subject;
-            payload.topic = topic;
-            payload.subtopic = subtopic;
-            payload.total_questions = 30;
-            console.log("Updated Payload for Topic Exam:", payload);
-            break;
-
-          case "subtopicExam":
-            console.log("Exam Type: Subtopic Exam");
-            payload.subject = subject;
-            payload.topic = topic;
-            payload.subtopic = subtopic;
-            payload.total_questions = 20;
-            console.log("Updated Payload for Subtopic Exam:", payload);
-            break;
-
-          case "schoolWork":
-          case "DistrictWork":
-            console.log("Exam Type: School Work");
-            payload.subject = "School Work";
-            payload.topic = subject;
-            payload.subtopic = title;
-            payload.class = userClass
-            payload.subtopicId = subtopicId;
-            payload.total_questions = null;
-            break;
-
-
-          default:
-            console.log("Exam Type: Default");
-            payload.total_questions = 10;
-            console.log("Updated Payload for Default:", payload);
+          rawQuestions = response.data.data || [];
         }
 
         // ==========================================
-        // 🔐 STEP 4: FETCH TOKEN & MAKE API REQUEST
+        // ⚙️ SHARED PARSING LOGIC (Online & Offline)
         // ==========================================
-
-        // Retrieve the token from AsyncStorage
-        const token = await AsyncStorage.getItem('token');
-
-        // Clean the token just in case it was saved with stringified quotes
-        const cleanToken = token ? token.replace(/"/g, '') : '';
-
-        console.log("Sending API Request with Payload:", payload, "and token", cleanToken);
-
-        // Add the config object with headers as the third argument in axios.post
-        const response = await axios.post(
-          `https://homeedu.fsdgroup.com.ng/api/ExamQuestions`,
-          payload,
-          {
-            headers: {
-              'Authorization': `Bearer ${cleanToken}`,
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        // Step 5: Log raw response
-        // console.log("Fetched Questions Response:", response.data);
-
-        // Step 6: Parse questions
-        const apiData = response.data.data || [];
-        // console.log("Raw API Data:", apiData);
-
-        const parsedQuestions = apiData.map((q, index) => {
-          // console.log(`Parsing Question #${index + 1}:`, q);
-
+        const parsedQuestions = rawQuestions.map((q, index) => {
           let parsedOptions = null;
 
-          // Safely parse options with error handling
           if (q.options) {
-            try {
-              parsedOptions = JSON.parse(q.options);
-            } catch (error) {
-              console.error(
-                `Failed to parse options for question ${q.QuestionId}:`,
-                error
-              );
-              console.error("Raw options string:", q.options);
-              // Fallback: return empty array or skip this question
-              parsedOptions = [];
+            // Safety check: Is it already parsed (Offline JSON) or a string (API JSON)?
+            if (typeof q.options === 'object') {
+              parsedOptions = q.options;
+            } else {
+              try {
+                parsedOptions = JSON.parse(q.options);
+              } catch (error) {
+                console.error(`Failed to parse options for question ${q.QuestionId}:`, error);
+                parsedOptions = [];
+              }
             }
           }
 
@@ -890,33 +909,28 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
           };
         });
 
-        // Filter out questions with invalid options
         const validQuestions = parsedQuestions.filter(
-          (q) => q.options && q.options.length > 0
+          (q) => q.options && ((Array.isArray(q.options) && q.options.length > 0) || Object.keys(q.options).length > 0)
         );
 
-        // console.log("Parsed Questions:", validQuestions);
         setQuestions(validQuestions);
+        console.log("✅ Questions state updated successfully.");
 
-        console.log("Questions state updated successfully.");
       } catch (error) {
         console.error("❌ Error fetching questions:", error);
-
-        // Optional: Handle 401 Unauthorized specifically
         if (error.response && error.response.status === 401) {
           console.log("Token expired or invalid. User needs to re-login.");
-          // You might want to trigger a logout function here
         }
-
         setQuestions([]);
       } finally {
         setLoading(false);
         console.log("=== Fetch Questions Function Completed ===");
       }
     };
+
     fetchQuestions();
-    fetchUserProfile();
-  }, [userData]);
+    fetchUserProfile(); // Assuming this is defined outside the hook in your original file
+  }, [userData, isOffline]); // Added isOffline to dependencies
 
   // 2. Add this useEffect to trigger the shake logic
   useEffect(() => {
@@ -999,23 +1013,43 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
     // Fetch narration if not already loaded
     if (!narrations[currentId]) {
-      try {
-        const response = await fetch(
-          `https://homeedu.fsdgroup.com.ng/api/narration/${currentId}`
-        );
-        const data = await response.json();
-        const newNarrations = { ...narrations };
+      // 🛑 OFFLINE MODE INTERCEPTOR
+      if (isOffline) {
+        console.log("📦 OFFLINE MODE: Skipping narration fetch.");
+        setNarrations((prev) => ({
+          ...prev,
+          [currentId]: [
+            { type: "text", value: "🛜 Come online to view the detailed explanation for this question." }
+          ]
+        }));
+      }
+      // 🌐 ONLINE MODE (Standard Fetch)
+      else {
+        try {
+          const response = await fetch(
+            `https://homeedu.fsdgroup.com.ng/api/narration/${currentId}`
+          );
+          const data = await response.json();
+          const newNarrations = { ...narrations };
 
-        if (response.ok && data.data && data.data.length > 0) {
-          newNarrations[currentId] = JSON.parse(data.data[0].Content);
-        } else {
-          newNarrations[currentId] = [
-            { type: "text", value: "No narration available" },
-          ];
+          if (response.ok && data.data && data.data.length > 0) {
+            newNarrations[currentId] = JSON.parse(data.data[0].Content);
+          } else {
+            newNarrations[currentId] = [
+              { type: "text", value: "No narration available" },
+            ];
+          }
+          setNarrations(newNarrations);
+        } catch (error) {
+          console.error("Error fetching narration:", error);
+          // Failsafe: If they are online but the network drops exactly when they click submit
+          setNarrations((prev) => ({
+            ...prev,
+            [currentId]: [
+              { type: "text", value: "⚠️ Network error. Could not load narration." }
+            ]
+          }));
         }
-        setNarrations(newNarrations);
-      } catch (error) {
-        console.error("Error fetching narration:", error);
       }
     }
 
@@ -1316,16 +1350,18 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
               </View>
             )}
 
-            <View style={styles.reportContainer}>
-              <TouchableOpacity
-                style={styles.reportButton}
-                onPress={() => handleOpenReport(currentQuestion.QuestionId)}
-              >
-                <Ionicons name="flag-outline" size={16} color="#FF4444" />
-                <Text style={styles.reportText}>Report Issue</Text>
-              </TouchableOpacity>
-            </View>
-
+            {/* 🌐 ONLY show the Report button if the user is ONLINE */}
+            {!isOffline && (
+              <View style={styles.reportContainer}>
+                <TouchableOpacity
+                  style={styles.reportButton}
+                  onPress={() => handleOpenReport(currentQuestion.QuestionId)}
+                >
+                  <Ionicons name="flag-outline" size={16} color="#FF4444" />
+                  <Text style={styles.reportText}>Report Issue</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             {/* Action Buttons: Toggle based on persistent submitted status */}
             {!isCurrentSubmitted ? (
               <TouchableOpacity
