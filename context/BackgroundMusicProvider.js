@@ -2,7 +2,7 @@ import React, { createContext, useEffect, useState, useRef } from 'react';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AppState } from 'react-native';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 export const BackgroundMusicContext = createContext();
 
 const SCREEN_MUSIC_MAP = {
@@ -27,15 +27,15 @@ export const BackgroundMusicProvider = ({ children }) => {
   const currentSongRef = useRef(null);
   const isAudioSetupRef = useRef(false);
   const loadingTimeoutRef = useRef(null);
-  const isMutedRef = useRef(false); // ✅ NEW: Track mute state in ref
+  const isMutedRef = useRef(true); // ✅ NEW: Track mute state in ref
   const isMemePausedRef = useRef(false); // ✅ NEW: Track if paused by meme
-  
+
   const [currentSong, setCurrentSong] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [songToPackMap, setSongToPackMap] = useState({});
   const [memeCategories, setMemeCategories] = useState({ correct: [], wrong: [] });
   const [mapLoaded, setMapLoaded] = useState(false);
-  
+
   const currentScreenRef = useRef(null);
   const appState = useRef(AppState.currentState);
 
@@ -45,9 +45,22 @@ export const BackgroundMusicProvider = ({ children }) => {
   }, [isMuted]);
 
   // Setup Audio Session Once
-  useEffect(() => {
-    const setupAudio = async () => {
+useEffect(() => {
+    const setupAudioAndPreferences = async () => {
       try {
+        // 1. Fetch the user's saved mute preference first
+        const savedMuteState = await AsyncStorage.getItem('user_is_muted');
+        if (savedMuteState !== null) {
+          const parsedMute = JSON.parse(savedMuteState);
+          setIsMuted(parsedMute);
+          isMutedRef.current = parsedMute;
+        } else {
+          // If no preference is saved, default to unmuted
+          setIsMuted(false);
+          isMutedRef.current = false;
+        }
+
+        // 2. Setup Audio Mode
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
@@ -55,12 +68,15 @@ export const BackgroundMusicProvider = ({ children }) => {
           interruptionModeIOS: 1,
           interruptionModeAndroid: 1,
         });
+        
+        // 3. Mark audio as setup ONLY after preferences are loaded
         isAudioSetupRef.current = true;
       } catch (error) {
-        console.error("❌ Audio setup failed:", error);
+        console.error("❌ Setup failed:", error);
+        isAudioSetupRef.current = true; // allow app to continue even if storage fails
       }
     };
-    setupAudio();
+    setupAudioAndPreferences();
   }, []);
 
   // Handle app going to background/foreground
@@ -83,7 +99,7 @@ export const BackgroundMusicProvider = ({ children }) => {
         if (soundObjectRef.current) {
           try {
             await soundObjectRef.current.pauseAsync();
-          } catch (e) {}
+          } catch (e) { }
         }
       }
       appState.current = nextAppState;
@@ -100,7 +116,7 @@ export const BackgroundMusicProvider = ({ children }) => {
       try {
         const response = await fetch(`https://fsdgroup.com.ng/Edu/music/music.json?t=${new Date().getTime()}`);
         const json = await response.json();
-        
+
         const newSongMap = {};
         const newMemeCats = { correct: [], wrong: [] };
 
@@ -122,7 +138,7 @@ export const BackgroundMusicProvider = ({ children }) => {
             }
           });
         }
-        
+
         setSongToPackMap(newSongMap);
         setMemeCategories(newMemeCats);
         setMapLoaded(true);
@@ -199,7 +215,7 @@ export const BackgroundMusicProvider = ({ children }) => {
 
     try {
       const packId = songToPackMap[fileName];
-      
+
       if (!packId) {
         console.log("🛑 No pack for:", fileName);
         await cleanupCurrentSound();
@@ -228,9 +244,9 @@ export const BackgroundMusicProvider = ({ children }) => {
       console.log("🎵 Loading:", fileName);
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: localUri },
-        { 
+        {
           shouldPlay: !isMutedRef.current, // ✅ Use ref instead of state
-          isLooping: true, 
+          isLooping: true,
           volume: 0.3,
           progressUpdateIntervalMillis: 1000,
         },
@@ -265,14 +281,14 @@ export const BackgroundMusicProvider = ({ children }) => {
       setCurrentSong(null);
       return;
     }
-    
+
     // ✅ CRITICAL FIX: Only restart if NOT muted and NOT paused by meme
-    if (status.isLoaded && 
-        !status.isPlaying && 
-        !status.isBuffering && 
-        !isMutedRef.current && // ✅ Check mute state
-        !isMemePausedRef.current && // ✅ Check if paused by meme
-        status.positionMillis > 0 // ✅ Only if it was actually playing (not just paused)
+    if (status.isLoaded &&
+      !status.isPlaying &&
+      !status.isBuffering &&
+      !isMutedRef.current && // ✅ Check mute state
+      !isMemePausedRef.current && // ✅ Check if paused by meme
+      status.positionMillis > 0 // ✅ Only if it was actually playing (not just paused)
     ) {
       console.log("⚠️ Song stopped unexpectedly, attempting restart...");
       setTimeout(async () => {
@@ -304,7 +320,7 @@ export const BackgroundMusicProvider = ({ children }) => {
     if (isMutedRef.current) return; // ✅ Use ref
 
     const availableMemes = type === 'correct' ? memeCategories.correct : memeCategories.wrong;
-    
+
     if (!availableMemes || availableMemes.length === 0) {
       console.log(`No memes found for category: ${type}`);
       return;
@@ -334,7 +350,7 @@ export const BackgroundMusicProvider = ({ children }) => {
       if (memeSoundRef.current) {
         try {
           await memeSoundRef.current.unloadAsync();
-        } catch (e) {}
+        } catch (e) { }
         memeSoundRef.current = null;
       }
 
@@ -343,7 +359,7 @@ export const BackgroundMusicProvider = ({ children }) => {
         { uri: localUri },
         { shouldPlay: true, volume: 0.5 }
       );
-      
+
       memeSoundRef.current = memeSound;
 
       // Resume background when done
@@ -371,7 +387,7 @@ export const BackgroundMusicProvider = ({ children }) => {
       if (soundObjectRef.current && !isMutedRef.current) {
         try {
           await soundObjectRef.current.playAsync();
-        } catch (e) {}
+        } catch (e) { }
       }
     }
   };
@@ -379,7 +395,14 @@ export const BackgroundMusicProvider = ({ children }) => {
   const toggleMute = async () => {
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
-    isMutedRef.current = newMutedState; // ✅ Update ref immediately
+    isMutedRef.current = newMutedState; 
+
+    // Save to device storage
+    try {
+      await AsyncStorage.setItem('user_is_muted', JSON.stringify(newMutedState));
+    } catch (e) {
+      console.error("Failed to save mute state:", e);
+    }
 
     if (soundObjectRef.current) {
       try {
@@ -405,7 +428,7 @@ export const BackgroundMusicProvider = ({ children }) => {
       if (memeSoundRef.current) {
         try {
           memeSoundRef.current.unloadAsync();
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, []);

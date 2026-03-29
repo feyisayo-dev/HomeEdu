@@ -4,8 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserContext } from '../context/UserContext';
 
 // ⚠️ CHANGE THIS VERSION NUMBER EVERY TIME YOU BUILD A NEW APK
-const CURRENT_ANDROID_VERSION = "1.1.8";
-const CURRENT_IOS_VERSION = "1.0.0";
+const CURRENT_ANDROID_VERSION = "1.2.0";
+const CURRENT_IOS_VERSION = "1.1.1";
 
 // ⚠️ MAINTENANCE MODE TOGGLE - Set to true to enable maintenance mode
 const MAINTENANCE_MODE = false; // Change to true when servers are down

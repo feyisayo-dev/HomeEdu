@@ -4,9 +4,13 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
-import * as SplashScreen from 'expo-splash-screen'; // ✅ IMPORT THIS
+import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import 'react-native-gesture-handler';
+
+// ── NEW IMPORTS FOR OFFLINE SYNC ──
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 
 // --- IMPORTS ---
 import LoginScreen from './screens/LoginScreen';
@@ -27,15 +31,19 @@ import NovelScreen from './screens/NovelScreen';
 import InstructionScreen from './screens/InstructionScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ErrorBoundary from './screens/errors/indexScreen';
-
+import * as Notifications from 'expo-notifications';
 // --- IMPORT MUSIC PROVIDER ---
 import { BackgroundMusicProvider, BackgroundMusicContext } from './context/BackgroundMusicProvider';
-
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 const Stack = createStackNavigator();
 LogBox.ignoreLogs(['new NativeEventEmitter']);
 
-// ✅ PREVENT SPLASH SCREEN FROM HIDING AUTOMATICALLY
-// This keeps your logo visible while fonts/data load, preventing the "White Screen"
 SplashScreen.preventAutoHideAsync();
 
 function getActiveRouteName(navigationState) {
@@ -55,7 +63,6 @@ const AppNavigator = ({ onAppReady }) => {
 
   useEffect(() => {
     if (isNavigatorReady) {
-      // Give HomeScreen a moment to start rendering before hiding splash
       setTimeout(() => {
         onAppReady?.();
       }, 300);
@@ -105,7 +112,25 @@ const AppNavigator = ({ onAppReady }) => {
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
+  // ── 0. ASK FOR NOTIFICATION PERMISSIONS ON STARTUP ──
+  useEffect(() => {
+    const requestPermissions = async () => {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
 
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('Failed to get push token for push notification!');
+        return;
+      }
+    };
+
+    requestPermissions();
+  }, []);
   // --- 1. LOAD FONTS ---
   const [fontsLoaded] = useFonts({
     'milkyCustom': require('./assets/fonts/milkyCustom.ttf'),
@@ -115,8 +140,7 @@ export default function App() {
   useEffect(() => {
     async function prepare() {
       try {
-        // You can pre-load images or other heavy assets here if needed
-        // We do NOT run Updates check here anymore to avoid freezing startup
+        // App pre-loading logic
       } catch (e) {
         console.warn(e);
       } finally {
@@ -127,8 +151,6 @@ export default function App() {
   }, []);
 
   // --- 3. DELAYED UPDATE CHECK ---
-  // We run this only AFTER the app is ready and fonts are loaded.
-  // This prevents the "Check for Updates" network call from freezing the launch.
   useEffect(() => {
     if (appIsReady && fontsLoaded && !__DEV__) {
       const checkUpdates = async () => {
@@ -143,16 +165,13 @@ export default function App() {
             );
           }
         } catch (error) {
-          // Fail silently, don't bug the user
           console.log("Error fetching updates:", error);
         }
       };
-      
-      // Wait 3 seconds after launch to check for updates
+
       setTimeout(checkUpdates, 3000);
     }
   }, [appIsReady, fontsLoaded]);
-
 
   // --- 4. HIDE SPLASH SCREEN CALLBACK ---
   const handleAppReady = useCallback(async () => {
@@ -166,11 +185,116 @@ export default function App() {
     }
   }, [appIsReady, fontsLoaded, splashHidden]);
 
+  // ── 5. THE STEALTH SYNC ENGINE ─────────────────────────────────────────────
+  useEffect(() => {
+    let isSyncing = false;
+
+    const processOfflineQueue = async () => {
+      if (isSyncing) return;
+      isSyncing = true;
+
+      try {
+        // Only run if we actually have internet
+        const netState = await NetInfo.fetch();
+        if (!netState.isConnected) {
+          isSyncing = false;
+          return;
+        }
+
+        const queueStr = await AsyncStorage.getItem('@offline_reports_queue');
+        if (!queueStr) {
+          isSyncing = false;
+          return;
+        }
+
+        let queue = JSON.parse(queueStr);
+        if (queue.length === 0) {
+          isSyncing = false;
+          return;
+        }
+
+        const now = Date.now();
+        // Separate the queue into "Ready to Sync" and "Not Ready Yet"
+        const itemsToSync = queue.filter(item => now >= item.syncAfter);
+        const remainingItems = queue.filter(item => now < item.syncAfter);
+
+        if (itemsToSync.length === 0) {
+          isSyncing = false;
+          return;
+        }
+
+        console.log(`[SYNC ENGINE] Waking up... Found ${itemsToSync.length} reports to upload.`);
+        let successfullySyncedIds = [];
+
+        for (const item of itemsToSync) {
+          try {
+            // Strip the local metadata (syncAfter, id) before sending to Laravel
+            const { syncAfter, id, ...payload } = item;
+
+            const res = await fetch('https://homeedu.fsdgroup.com.ng/api/ExamReport', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok || data.status === 200) {
+              successfullySyncedIds.push(id);
+              console.log(`[SYNC ENGINE] ✅ Report ${id} uploaded successfully!`);
+            }
+          } catch (err) {
+            console.log(`[SYNC ENGINE] ❌ Failed to upload report ${item.id}. Will retry later.`, err);
+          }
+        }
+        if (successfullySyncedIds.length > 0) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Sync Complete",
+              body: `${successfullySyncedIds.length} report(s) uploaded successfully.`,
+            },
+            trigger: null,
+          });
+        }
+        // Keep items that are NOT ready yet, AND items that FAILED to sync
+        const failedItems = itemsToSync.filter(item => !successfullySyncedIds.includes(item.id));
+        const finalQueue = [...remainingItems, ...failedItems];
+
+        // Save the updated queue back to the phone
+        await AsyncStorage.setItem('@offline_reports_queue', JSON.stringify(finalQueue));
+
+      } catch (e) {
+        console.error("[SYNC ENGINE] Error processing queue", e);
+      } finally {
+        isSyncing = false;
+      }
+    };
+
+    // Trigger #1: Run when the app first launches
+    processOfflineQueue();
+
+    // Trigger #2: Run quietly in the background every 2 minutes
+    const intervalId = setInterval(processOfflineQueue, 2 * 60 * 1000);
+
+    // Trigger #3: Run immediately if the phone regains Wi-Fi
+    const unsubscribeNet = NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        processOfflineQueue();
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      unsubscribeNet();
+    };
+  }, []);
+  // ──────────────────────────────────────────────────────────────────────────
+
   if (!appIsReady || !fontsLoaded) {
-    return null; // Keep the native splash screen visible
+    return null;
   }
 
-  // --- 5. RENDER ---
+  // --- 6. RENDER ---
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

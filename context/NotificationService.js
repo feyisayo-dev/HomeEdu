@@ -69,11 +69,7 @@ const _scheduleStreakNotification = async (streak, stars) => {
       sound: true,
       color: '#864AF9',
     },
-    trigger: {
-      hour: 18,
-      minute: 0,
-      repeats: true,
-    },
+    trigger: { date: triggerDate },
   });
   console.log(`✅ Streak notification scheduled: "${title}"`);
 };

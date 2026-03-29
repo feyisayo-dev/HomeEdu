@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
     ScrollView, SafeAreaView, Animated, StatusBar,
@@ -6,8 +6,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 👈 ADD THIS IMPORT
 import { useUser } from '../context/UserContext';
-
+import { useFocusEffect } from '@react-navigation/native';
 // ─── Availability Badge ────────────────────────────────────────────────────
 const AvailabilityBadge = ({ availability }) => {
     const config = {
@@ -63,15 +64,10 @@ const ruleStyles = StyleSheet.create({
 });
 
 // ─── Date-aware availability resolver ─────────────────────────────────────
-// This is the fix: we compute availability from the actual dates on the device,
-// so a closed exam stays closed even if the server field is stale or missing.
 const resolveAvailability = (serverAvailability, openDate, closeDate) => {
     const now = Date.now();
-
     if (closeDate && now > new Date(closeDate).getTime()) return 'closed';
     if (openDate && now < new Date(openDate).getTime()) return 'upcoming';
-
-    // Both date checks passed (or dates aren't set) — trust the server value
     return serverAvailability ?? 'open';
 };
 
@@ -81,15 +77,17 @@ const InstructionScreen = ({ route, navigation }) => {
         type, subtopicId, subject, title,
         duration, instructions, userClass,
         teacherName, openDate, closeDate,
-        availability: serverAvailability,   // renamed so we don't shadow our resolved value
+        availability: serverAvailability,
+        isOffline,
+        offlineQuestions
     } = route.params;
+    console.log("This are the offline questions", offlineQuestions);
 
     const { userData } = useUser();
 
     const [attemptsCount, setAttemptsCount] = useState(0);
     const [loadingAttempts, setLoadingAttempts] = useState(true);
 
-    // ── Resolve actual availability from dates first, server field second ──
     const availability = resolveAvailability(serverAvailability, openDate, closeDate);
 
     // ── Parse instructions safely ──────────────────────────────────────────
@@ -113,37 +111,74 @@ const InstructionScreen = ({ route, navigation }) => {
     const slideAnim = useRef(new Animated.Value(60)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
+    // ── Animations (Keep these in a regular useEffect) ─────────
     useEffect(() => {
         Animated.parallel([
             Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
             Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
         ]).start();
+    }, []);
 
-        const fetchAttempts = async () => {
-            if (!userData?.username) { setLoadingAttempts(false); return; }
-            try {
-                const response = await axios.get(
-                    `https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`
-                );
-                if (response.data.status === 200) {
-                    const past = response.data.data.filter(r => r.SubtopicId === subtopicId);
-                    setAttemptsCount(past.length);
+    // ── Fetch Attempts (Must refresh every time screen is viewed) ─────────
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true; // Cleanup flag
+
+            const fetchAttempts = async () => {
+                if (!userData?.username) { setLoadingAttempts(false); return; }
+                setLoadingAttempts(true);
+
+                try {
+                    let pastAttemptsCount = 0;
+
+                    // 1. Fetch from Server (Online) OR Global Cache (Offline)
+                    if (!isOffline) {
+                        const response = await axios.get(`https://homeedu.fsdgroup.com.ng/api/report/${userData.username}`);
+                        if (response.data.status === 200 && isActive) {
+                            // Check for both Capital and Lowercase S just in case!
+                            const past = response.data.data.filter(r => r.SubtopicId === subtopicId || r.subtopicId === subtopicId);
+                            pastAttemptsCount = past.length;
+
+                            await AsyncStorage.setItem(`@cached_user_reports_${userData.username}`, JSON.stringify(response.data.data));
+                        }
+                    } else {
+                        // Offline Global Cache
+                        const cachedStr = await AsyncStorage.getItem(`@cached_user_reports_${userData.username}`);
+                        if (cachedStr && isActive) {
+                            const allReports = JSON.parse(cachedStr);
+                            const past = allReports.filter(r => r.SubtopicId === subtopicId || r.subtopicId === subtopicId);
+                            pastAttemptsCount = past.length;
+                        }
+                    }
+
+                    // 2. Add Unsynced Offline Attempts from the Stealth Queue
+                    let unsyncedCount = 0;
+                    const queueStr = await AsyncStorage.getItem('@offline_reports_queue');
+                    if (queueStr && isActive) {
+                        const queue = JSON.parse(queueStr);
+                        unsyncedCount = queue.filter(r => r.subtopicId === subtopicId || r.SubtopicId === subtopicId).length;
+                    }
+
+                    if (isActive) {
+                        setAttemptsCount(pastAttemptsCount + unsyncedCount);
+                    }
+
+                } catch (err) {
+                    console.log('Could not fetch past attempts', err);
+                } finally {
+                    if (isActive) setLoadingAttempts(false);
                 }
-            } catch (err) {
-                console.log('Could not fetch past attempts', err);
-            } finally {
-                setLoadingAttempts(false);
-            }
-        };
+            };
 
-        fetchAttempts();
-    }, [userData, subtopicId]);
+            fetchAttempts();
 
+            return () => { isActive = false; }; // Cleanup when screen loses focus
+        }, [userData, subtopicId, isOffline])
+    );
     // ── Gate logic ─────────────────────────────────────────────────────────
     const isAttemptsExhausted = !isUnlimited && attemptsCount >= maxAttempts;
     const canStart = availability === 'open' && !isAttemptsExhausted;
 
-    // Human-readable reason why the button is locked
     const lockedReason = (() => {
         if (isAttemptsExhausted) return 'Max Attempts Reached';
         if (availability === 'upcoming') return 'Not Open Yet';
@@ -157,6 +192,8 @@ const InstructionScreen = ({ route, navigation }) => {
             type, subtopicId, subject, title, duration,
             instructions: parsed, userClass,
             selectedSubjects: [], subtopic: null, topic: null, examId: null,
+            isOffline: isOffline || false,
+            offlineQuestions: offlineQuestions || null
         });
     };
 
