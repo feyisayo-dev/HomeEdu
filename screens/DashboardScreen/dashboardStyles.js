@@ -60,7 +60,18 @@ const styles = StyleSheet.create({
   topTabText: { fontSize: 15, fontWeight: '700', color: COLORS.textLight },
   activeTopTabText: { color: COLORS.textWhite, fontWeight: '900' },
   // INFO / PROFILE CARD
-  infoContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.primary, padding: 20, borderRadius: 20, marginBottom: 16, borderWidth: 2, borderColor: COLORS.border, shadowColor: COLORS.black, shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 4 },
+   infoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.primary,
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    ...sharedStyles.hardShadow,
+  },
   leftInfo: { flex: 1 },
   hello: { color: 'rgba(255,255,255,0.9)', fontSize: 16, fontWeight: '600' },
   infoUsername: { color: '#FFFFFF', fontSize: 28, fontWeight: '900', letterSpacing: 0.5 },
@@ -140,11 +151,50 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   loadingText: { marginTop: 12, fontSize: 16, color: COLORS.textLight, fontWeight: '600' },
   // MODAL
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '90%', backgroundColor: '#fff', borderRadius: 20, padding: 24, borderWidth: 3, borderColor: '#000', shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0, elevation: 10 },
-  modalTitle: { fontSize: 22, fontWeight: '900', color: '#000', marginBottom: 16, textAlign: 'center' },
-  modalAvatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: COLORS.primary, alignSelf: 'center' },
-  avatarBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: COLORS.primary, borderRadius: 12, padding: 4, borderWidth: 2, borderColor: '#fff' },
+   modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 24,
+    width: width * 0.9,
+    maxWidth: 400,
+    borderWidth: 3,        // Thick border
+    borderColor: '#000',   // Pitch black
+    // Hard Shadow (Neo-Brutalist)
+    shadowColor: "#000",
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#000",
+    marginBottom: 24,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  modalAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: "#000",
+  },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#864AF9',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
   uploadOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 50, justifyContent: 'center', alignItems: 'center' },
   // PROFILE INPUTS
   inputGroup: { marginBottom: 4 },
@@ -183,6 +233,21 @@ const styles = StyleSheet.create({
   // SOUND PAGE
   SoundTitle: { fontSize: 32, fontWeight: '900', color: '#864AF9', marginBottom: 8, letterSpacing: 1, textTransform: 'uppercase' },
   SoundDescription: { fontSize: 16, color: '#2D3748', fontWeight: '600', marginBottom: 10, lineHeight: 22 },
+  // ── FOOTER STYLES ─────────────────────────────────────────────
+  footerContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.5, // Gives it that faded watermark look
+    marginTop: 10,
+  },
+  footerText: {
+    fontSize: 11,
+    color: '#64748B', // Slate gray
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
 });
 
 export default styles;

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useContext, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, RefreshControl,
+  Image,
   ActivityIndicator, Modal, Alert, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +27,7 @@ import PackagesTab from './PackagesTab';
 import useDashboard from './useDashboard';
 import useMusicPacks from './useMusicPacks';
 import useTimetable from './useTimetable';
+import Footer from './Footer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 const DashboardContent = ({ route, navigation }) => {
@@ -33,13 +35,13 @@ const DashboardContent = ({ route, navigation }) => {
   const { userData, setUserData } = useUser();
 
   const [activeScreenTab, setActiveScreenTab] = useState('dashboard');
-  const [modalVisible, setModalVisible]       = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [SchoolmodalVisible, setSchoolModalVisible] = useState(false);
-  const [neoAlertConfig, setNeoAlertConfig]   = useState({ visible: false, title: '', message: '', buttons: [] });
+  const [neoAlertConfig, setNeoAlertConfig] = useState({ visible: false, title: '', message: '', buttons: [] });
   const tutorialHasStarted = useRef(false);
   const notificationSetupDone = useRef(false);
-  const notificationTimeout   = useRef(null);
+  const notificationTimeout = useRef(null);
 
   // ── Redirect if no user ───────────────────────────────────────────────────
   useEffect(() => {
@@ -106,12 +108,12 @@ const DashboardContent = ({ route, navigation }) => {
 
   // ── Section data ──────────────────────────────────────────────────────────
   const sections = useMemo(() => [
-    { type: 'info',        id: 1, name: 'Profile' },
-    { type: 'streaks',     id: 2, name: 'Streaks' },
-    { type: 'reports',     id: 3, name: 'Reports' },
-    { type: 'timetable',   id: 4, name: 'Timetable' },
+    { type: 'info', id: 1, name: 'Profile' },
+    { type: 'streaks', id: 2, name: 'Streaks' },
+    { type: 'reports', id: 3, name: 'Reports' },
+    { type: 'timetable', id: 4, name: 'Timetable' },
     { type: 'leaderboard', id: 5, name: 'Leaderboard' },
-    { type: 'subjects',    id: 6, name: 'Subjects' },
+    { type: 'subjects', id: 6, name: 'Subjects' },
   ], []);
 
   if (!userData) {
@@ -122,13 +124,20 @@ const DashboardContent = ({ route, navigation }) => {
   const renderSectionContent = (item) => {
     switch (item.type) {
 
-      case 'info':
+      case "info":
         return (
-          <TouchableOpacity style={styles.infoContainer} onPress={() => setShowProfileModal(true)}>
+          <TouchableOpacity
+            style={styles.infoContainer}
+            onPress={() => setShowProfileModal(true)}
+          >
             <View style={styles.leftInfo}>
               <Text style={styles.hello}> Hello </Text>
               <Text style={styles.infoUsername}> {userData?.username}</Text>
             </View>
+            <Image
+              source={{ uri: userData?.localAvatar || userData?.avatar }}
+              style={styles.infoAvatar}
+            />
           </TouchableOpacity>
         );
 
@@ -323,6 +332,7 @@ const DashboardContent = ({ route, navigation }) => {
               {renderSectionContent(section)}
             </TutorialStep>
           ))}
+          <Footer />
         </ScrollView>
       ) : (
         <PackagesTab
@@ -386,7 +396,7 @@ const DashboardContent = ({ route, navigation }) => {
         </View>
       </Modal>
 
-      <JoinSchoolModal isVisible={SchoolmodalVisible} onClose={() => setSchoolModalVisible(false)} onJoinSuccess={() => {}} />
+      <JoinSchoolModal isVisible={SchoolmodalVisible} onClose={() => setSchoolModalVisible(false)} onJoinSuccess={() => { }} />
       <ParentEmailCheck />
       <NeoAlert
         visible={neoAlertConfig.visible}
