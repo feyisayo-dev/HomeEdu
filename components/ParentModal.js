@@ -8,16 +8,16 @@ const { width } = Dimensions.get('window');
 const ParentEmailCheck = () => {
     const navigation = useNavigation();
 
-    // State for Parent Email Modal
+    // State for Parent Email Form
     const [isOpen, setIsOpen] = useState(false);
     const [parentMail, setParentMail] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    // State for Session Expiry Modal
+    // State for Session Expiry
     const [isSessionExpired, setIsSessionExpired] = useState(false);
 
-    // State for Custom Alert Modal
+    // State for Custom Alert
     const [alertModal, setAlertModal] = useState({
         visible: false,
         type: 'success', // 'success' or 'error'
@@ -29,17 +29,14 @@ const ParentEmailCheck = () => {
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                // A. Get Token
                 const token = await AsyncStorage.getItem('token');
 
-                // If no token, force login immediately
                 if (!token) {
                     setIsSessionExpired(true);
                     setIsLoading(false);
                     return;
                 }
 
-                // B. Call API with Token
                 const response = await fetch('https://homeedu.fsdgroup.com.ng/api/student/check-parent-email', {
                     method: 'GET',
                     headers: {
@@ -49,7 +46,6 @@ const ParentEmailCheck = () => {
                     },
                 });
 
-                // C. Handle Unauthenticated (401)
                 if (response.status === 401) {
                     setIsSessionExpired(true);
                     setIsLoading(false);
@@ -57,7 +53,6 @@ const ParentEmailCheck = () => {
                 }
 
                 const data = await response.json();
-                console.log("Check Data:", data);
 
                 if (response.ok && data.has_parent_email === false) {
                     setIsOpen(true);
@@ -75,21 +70,13 @@ const ParentEmailCheck = () => {
 
     // ✅ 2. CUSTOM ALERT FUNCTION
     const showAlert = (type, title, message) => {
-        setAlertModal({
-            visible: true,
-            type,
-            title,
-            message
-        });
+        setAlertModal({ visible: true, type, title, message });
     };
 
     const closeAlert = () => {
-        setAlertModal({
-            ...alertModal,
-            visible: false
-        });
-        
-        // If success, close parent email modal too
+        setAlertModal({ ...alertModal, visible: false });
+
+        // If it was a success message, close the main email form too
         if (alertModal.type === 'success') {
             setIsOpen(false);
         }
@@ -97,13 +84,11 @@ const ParentEmailCheck = () => {
 
     // ✅ 3. THE SAVE
     const handleSubmit = async () => {
-        // Validate email
         if (!parentMail.trim()) {
             showAlert('error', 'Email Required', 'Please enter your parent\'s email address.');
             return;
         }
 
-        // Basic email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(parentMail)) {
             showAlert('error', 'Invalid Email', 'Please enter a valid email address.');
@@ -140,14 +125,11 @@ const ParentEmailCheck = () => {
 
     // ✅ 4. REDIRECT FUNCTION
     const handleLogout = async () => {
-        // Clear stored data
         await AsyncStorage.removeItem('token');
         await AsyncStorage.removeItem('userData');
 
-        // Close modal
         setIsSessionExpired(false);
 
-        // Reset navigation to Login screen
         navigation.reset({
             index: 0,
             routes: [{ name: 'Login' }],
@@ -156,116 +138,86 @@ const ParentEmailCheck = () => {
 
     if (isLoading) return null;
 
+    // 🔥 THE FIX: Calculate if ANY modal state is active to open the Single Master Modal
+    const isAnyModalVisible = isSessionExpired || alertModal.visible || isOpen;
+
     return (
-        <>
-            {/* --- MODAL 1: PARENT EMAIL INPUT --- */}
-            <Modal transparent={true} visible={isOpen} animationType="fade">
-                <View style={styles.overlay}>
+        <Modal transparent={true} visible={isAnyModalVisible} animationType="fade">
+            <View style={styles.overlay}>
+
+                {/* PRIORITY 1: SESSION EXPIRED UI */}
+                {isSessionExpired ? (
                     <View style={styles.modalContent}>
-                        {/* Icon Circle */}
-                        <View style={styles.iconCircle}>
-                            <Text style={styles.iconEmoji}>📧</Text>
-                        </View>
-
-                        <Text style={styles.modalTitle}>Parent Email Required</Text>
-                        
-                        <Text style={styles.modalMessage}>
-                            Please provide your parent's email address to receive weekly progress reports and stay updated on your academic journey.
-                        </Text>
-
-                        <TextInput
-                            style={styles.input}
-                            placeholder="parent@example.com"
-                            placeholderTextColor="#aaa"
-                            value={parentMail}
-                            onChangeText={setParentMail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            editable={!isSaving}
-                        />
-
-                        <TouchableOpacity
-                            style={[styles.primaryBtn, isSaving && styles.btnDisabled]}
-                            onPress={handleSubmit}
-                            disabled={isSaving}
-                        >
-                            {isSaving ? (
-                                <ActivityIndicator color="white" size="small" />
-                            ) : (
-                                <Text style={styles.primaryBtnText}>Save Email</Text>
-                            )}
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* --- MODAL 2: SESSION EXPIRED --- */}
-            <Modal transparent={true} visible={isSessionExpired} animationType="fade">
-                <View style={styles.overlay}>
-                    <View style={styles.modalContent}>
-                        {/* Icon Circle */}
                         <View style={[styles.iconCircle, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
                             <Text style={styles.iconEmoji}>🔒</Text>
                         </View>
-
                         <Text style={styles.modalTitle}>Session Expired</Text>
-                        
                         <Text style={styles.modalMessage}>
                             Your session has timed out or you are not logged in. Please log in again to continue using HomeEdu.
                         </Text>
-
-                        <TouchableOpacity
-                            style={[styles.primaryBtn, { backgroundColor: '#DC2626' }]}
-                            onPress={handleLogout}
-                        >
+                        <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: '#DC2626' }]} onPress={handleLogout}>
                             <Text style={styles.primaryBtnText}>Go to Login</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
+                )
 
-            {/* --- MODAL 3: CUSTOM ALERT (SUCCESS/ERROR) --- */}
-            <Modal transparent={true} visible={alertModal.visible} animationType="fade">
-                <View style={styles.overlay}>
-                    <View style={styles.modalContent}>
-                        {/* Dynamic Icon Circle based on type */}
-                        <View style={[
-                            styles.iconCircle,
-                            alertModal.type === 'success' 
-                                ? { backgroundColor: '#D1FAE5', borderColor: '#A7F3D0' }
-                                : { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }
-                        ]}>
-                            <Text style={styles.iconEmoji}>
-                                {alertModal.type === 'success' ? '✅' : '❌'}
+                    /* PRIORITY 2: CUSTOM ALERT UI */
+                    : alertModal.visible ? (
+                        <View style={styles.modalContent}>
+                            <View style={[
+                                styles.iconCircle,
+                                alertModal.type === 'success' ? { backgroundColor: '#D1FAE5', borderColor: '#A7F3D0' } : { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }
+                            ]}>
+                                <Text style={styles.iconEmoji}>{alertModal.type === 'success' ? '✅' : '❌'}</Text>
+                            </View>
+                            <Text style={[styles.modalTitle, alertModal.type === 'error' && { color: '#DC2626' }]}>
+                                {alertModal.title}
                             </Text>
+                            <Text style={styles.modalMessage}>{alertModal.message}</Text>
+                            <TouchableOpacity
+                                style={[styles.primaryBtn, alertModal.type === 'success' ? { backgroundColor: '#10B981' } : { backgroundColor: '#DC2626' }]}
+                                onPress={closeAlert}
+                            >
+                                <Text style={styles.primaryBtnText}>OK</Text>
+                            </TouchableOpacity>
                         </View>
+                    )
 
-                        <Text style={[
-                            styles.modalTitle,
-                            alertModal.type === 'error' && { color: '#DC2626' }
-                        ]}>
-                            {alertModal.title}
-                        </Text>
-                        
-                        <Text style={styles.modalMessage}>
-                            {alertModal.message}
-                        </Text>
+                        /* PRIORITY 3: PARENT EMAIL INPUT UI */
+                        : isOpen ? (
+                            <View style={styles.modalContent}>
+                                <View style={styles.iconCircle}>
+                                    <Text style={styles.iconEmoji}>📧</Text>
+                                </View>
+                                <Text style={styles.modalTitle}>Parent Email Required</Text>
+                                <Text style={styles.modalMessage}>
+                                    Please provide your parent's email address to receive weekly progress reports and stay updated on your academic journey.
+                                </Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="parent@example.com"
+                                    placeholderTextColor="#aaa"
+                                    value={parentMail}
+                                    onChangeText={setParentMail}
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
+                                    editable={!isSaving}
+                                />
+                                <TouchableOpacity style={[styles.primaryBtn, isSaving && styles.btnDisabled]} onPress={handleSubmit} disabled={isSaving}>
+                                    {isSaving ? (
+                                        <ActivityIndicator color="white" size="small" />
+                                    ) : (
+                                        <Text style={styles.primaryBtnText}>Save Email</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        )
 
-                        <TouchableOpacity
-                            style={[
-                                styles.primaryBtn,
-                                alertModal.type === 'success' 
-                                    ? { backgroundColor: '#10B981' }
-                                    : { backgroundColor: '#DC2626' }
-                            ]}
-                            onPress={closeAlert}
-                        >
-                            <Text style={styles.primaryBtnText}>OK</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-        </>
+                            /* FALLBACK: Render nothing inside the overlay if state is weird */
+                            : null}
+
+            </View>
+        </Modal>
     );
 };
 
@@ -301,9 +253,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E9D5FF',
     },
-    iconEmoji: {
-        fontSize: 40,
-    },
+    iconEmoji: { fontSize: 40 },
     modalTitle: {
         fontSize: 24,
         fontWeight: 'bold',
@@ -352,9 +302,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontFamily: 'latto',
     },
-    btnDisabled: {
-        opacity: 0.6,
-    },
+    btnDisabled: { opacity: 0.6 },
 });
 
 export default ParentEmailCheck;

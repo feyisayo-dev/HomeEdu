@@ -34,6 +34,50 @@ import ErrorBoundary from './screens/errors/indexScreen';
 import * as Notifications from 'expo-notifications';
 // --- IMPORT MUSIC PROVIDER ---
 import { BackgroundMusicProvider, BackgroundMusicContext } from './context/BackgroundMusicProvider';
+const BACKGROUND_SYNC_TASK = 'background-report-sync';
+
+TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
+  try {
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    const queueStr = await AsyncStorage.getItem('@offline_reports_queue');
+    if (!queueStr) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    let queue = JSON.parse(queueStr);
+    const now = Date.now();
+    const itemsToSync = queue.filter(item => now >= item.syncAfter);
+
+    if (itemsToSync.length === 0) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    console.log(`[BACKGROUND] Syncing ${itemsToSync.length} items...`);
+    let syncedIds = [];
+
+    for (const item of itemsToSync) {
+      const { syncAfter, id, ...payload } = item;
+      const res = await fetch('https://homeedu.fsdgroup.com.ng/api/ExamReport', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) syncedIds.push(id);
+    }
+
+    // Keep failed/pending items
+    const remainingQueue = queue.filter(item => !syncedIds.includes(item.id));
+    await AsyncStorage.setItem('@offline_reports_queue', JSON.stringify(remainingQueue));
+
+    return syncedIds.length > 0
+      ? BackgroundFetch.BackgroundFetchResult.NewData
+      : BackgroundFetch.BackgroundFetchResult.Failed;
+
+  } catch (error) {
+    console.error("[BACKGROUND] Task Failed", error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -189,12 +233,14 @@ export default function App() {
   useEffect(() => {
     let isSyncing = false;
 
+    // Helper to pause execution
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     const processOfflineQueue = async () => {
       if (isSyncing) return;
       isSyncing = true;
 
       try {
-        // Only run if we actually have internet
         const netState = await NetInfo.fetch();
         if (!netState.isConnected) {
           isSyncing = false;
@@ -214,7 +260,6 @@ export default function App() {
         }
 
         const now = Date.now();
-        // Separate the queue into "Ready to Sync" and "Not Ready Yet"
         const itemsToSync = queue.filter(item => now >= item.syncAfter);
         const remainingItems = queue.filter(item => now < item.syncAfter);
 
@@ -228,7 +273,6 @@ export default function App() {
 
         for (const item of itemsToSync) {
           try {
-            // Strip the local metadata (syncAfter, id) before sending to Laravel
             const { syncAfter, id, ...payload } = item;
 
             const res = await fetch('https://homeedu.fsdgroup.com.ng/api/ExamReport', {
@@ -246,21 +290,24 @@ export default function App() {
           } catch (err) {
             console.log(`[SYNC ENGINE] ❌ Failed to upload report ${item.id}. Will retry later.`, err);
           }
+
+          // THE API THROTTLE: Wait 2 seconds before sending the next report from this same phone
+          await sleep(2000);
         }
+
         if (successfullySyncedIds.length > 0) {
           await Notifications.scheduleNotificationAsync({
             content: {
-              title: "Sync Complete",
-              body: `${successfullySyncedIds.length} report(s) uploaded successfully.`,
+              title: "HomeEdu Sync Complete ✅",
+              body: `${successfullySyncedIds.length} offline exam(s) successfully submitted.`,
             },
             trigger: null,
           });
         }
-        // Keep items that are NOT ready yet, AND items that FAILED to sync
+
         const failedItems = itemsToSync.filter(item => !successfullySyncedIds.includes(item.id));
         const finalQueue = [...remainingItems, ...failedItems];
 
-        // Save the updated queue back to the phone
         await AsyncStorage.setItem('@offline_reports_queue', JSON.stringify(finalQueue));
 
       } catch (e) {
@@ -270,13 +317,8 @@ export default function App() {
       }
     };
 
-    // Trigger #1: Run when the app first launches
     processOfflineQueue();
-
-    // Trigger #2: Run quietly in the background every 2 minutes
     const intervalId = setInterval(processOfflineQueue, 2 * 60 * 1000);
-
-    // Trigger #3: Run immediately if the phone regains Wi-Fi
     const unsubscribeNet = NetInfo.addEventListener(state => {
       if (state.isConnected) {
         processOfflineQueue();
@@ -289,7 +331,25 @@ export default function App() {
     };
   }, []);
   // ──────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const registerBackgroundSync = async () => {
+      try {
+        const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
+        if (!isRegistered) {
+          await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+            minimumInterval: 15 * 60, // Minimum 15 minutes (OS controls actual time)
+            stopOnTerminate: false,   // Keep running if app is killed (Android mostly)
+            startOnBoot: true,        // Restart after phone reboot (Android mostly)
+          });
+          console.log("[BACKGROUND] Task Registered!");
+        }
+      } catch (err) {
+        console.error("Failed to register background task", err);
+      }
+    };
 
+    registerBackgroundSync();
+  }, []);
   if (!appIsReady || !fontsLoaded) {
     return null;
   }

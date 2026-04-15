@@ -25,7 +25,7 @@ export const isWindowActiveNow = () => {
   const wat = new Date(now.getTime() + 60 * 60 * 1000);
   const day = wat.getUTCDay(); // 0 = Sunday
 
-  if (day !== 7) return false; // Only Sundays
+  if (day !== 7) return false; // Only Saturday
 
   const minutes = wat.getUTCHours() * 60 + wat.getUTCMinutes();
   const start   = 8 * 60 + 30;  // 08:30 WAT

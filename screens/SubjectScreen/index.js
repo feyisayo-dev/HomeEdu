@@ -204,7 +204,7 @@ const SubjectScreen = ({ navigation }) => {
 
   // During district window: show download button to EVERYONE (free + premium)
   // Outside window: only show to premium
-  const showDownloadButton = !isOffline && (isPremiumUser || isDistrictExamWindowActive);
+  const showDownloadButton = !isOffline;
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
