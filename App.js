@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Alert, LogBox } from 'react-native';
+import { View, Alert, LogBox, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +8,14 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import 'react-native-gesture-handler';
 
-// ── NEW IMPORTS FOR OFFLINE SYNC ──
+// ── SYNC & STORAGE IMPORTS ──
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch';
+import * as Notifications from 'expo-notifications';
 
-// --- IMPORTS ---
+// --- SCREENS & CONTEXTS ---
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -31,9 +34,10 @@ import NovelScreen from './screens/NovelScreen';
 import InstructionScreen from './screens/InstructionScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ErrorBoundary from './screens/errors/indexScreen';
-import * as Notifications from 'expo-notifications';
-// --- IMPORT MUSIC PROVIDER ---
 import { BackgroundMusicProvider, BackgroundMusicContext } from './context/BackgroundMusicProvider';
+import { DistrictWindowProvider } from './src/utils/districtWindow'; 
+
+// ── BACKGROUND TASK DEFINITION ──
 const BACKGROUND_SYNC_TASK = 'background-report-sync';
 
 TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
@@ -42,6 +46,8 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     if (!netState.isConnected) return BackgroundFetch.BackgroundFetchResult.NoData;
 
     const queueStr = await AsyncStorage.getItem('@offline_reports_queue');
+    console.log("[BACKGROUND] Task Triggered. Checking for pending reports to sync...");
+    console.log("[BACKGROUND] Current Queue Length:", queueStr ? JSON.parse(queueStr).length : 0);
     if (!queueStr) return BackgroundFetch.BackgroundFetchResult.NoData;
 
     let queue = JSON.parse(queueStr);
@@ -51,26 +57,41 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     if (itemsToSync.length === 0) return BackgroundFetch.BackgroundFetchResult.NoData;
 
     console.log(`[BACKGROUND] Syncing ${itemsToSync.length} items...`);
-    let syncedIds = [];
+    let successfullySyncedIds = [];
 
     for (const item of itemsToSync) {
       const { syncAfter, id, ...payload } = item;
+      
       const res = await fetch('https://homeedu.fsdgroup.com.ng/api/ExamReport', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) syncedIds.push(id);
+      // Match the frontend check - Laravel returns 200 fast
+      const data = await res.json().catch(() => ({}));
+      if (res.ok || data.status === 200) {
+        successfullySyncedIds.push(id);
+      }
     }
 
     // Keep failed/pending items
-    const remainingQueue = queue.filter(item => !syncedIds.includes(item.id));
+    const remainingQueue = queue.filter(item => !successfullySyncedIds.includes(item.id));
     await AsyncStorage.setItem('@offline_reports_queue', JSON.stringify(remainingQueue));
 
-    return syncedIds.length > 0
-      ? BackgroundFetch.BackgroundFetchResult.NewData
-      : BackgroundFetch.BackgroundFetchResult.Failed;
+    // 🚀 FIRE THE NATIVE NOTIFICATION ON BACKGROUND SUCCESS
+    if (successfullySyncedIds.length > 0) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "HomeEdu Sync Complete ✅",
+          body: `${successfullySyncedIds.length} offline exam(s) successfully submitted to your dashboard.`,
+        },
+        trigger: null,
+      });
+      return BackgroundFetch.BackgroundFetchResult.NewData;
+    }
+
+    return BackgroundFetch.BackgroundFetchResult.Failed;
 
   } catch (error) {
     console.error("[BACKGROUND] Task Failed", error);
@@ -85,10 +106,11 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
 const Stack = createStackNavigator();
 LogBox.ignoreLogs(['new NativeEventEmitter']);
-
 SplashScreen.preventAutoHideAsync();
+
 
 function getActiveRouteName(navigationState) {
   if (!navigationState) return null;
@@ -114,6 +136,7 @@ const AppNavigator = ({ onAppReady }) => {
   }, [isNavigatorReady, onAppReady]);
 
   return (
+    <DistrictWindowProvider>
     <NavigationContainer
       ref={navigationRef}
       onReady={() => {
@@ -150,6 +173,7 @@ const AppNavigator = ({ onAppReady }) => {
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
+    </DistrictWindowProvider>
   );
 };
 
@@ -248,6 +272,8 @@ export default function App() {
         }
 
         const queueStr = await AsyncStorage.getItem('@offline_reports_queue');
+        console.log("[SYNC ENGINE] Task Triggered. Checking for pending reports to sync...");
+        console.log("[SYNC ENGINE] Current Queue Length:", queueStr ? JSON.parse(queueStr).length : 0);
         if (!queueStr) {
           isSyncing = false;
           return;
@@ -261,6 +287,8 @@ export default function App() {
 
         const now = Date.now();
         const itemsToSync = queue.filter(item => now >= item.syncAfter);
+        console.log(`[SYNC ENGINE] Found ${itemsToSync.length} report(s) ready to sync. Attempting upload...`);
+        console.log(`[SYNC ENGINE] Timestamps of items to sync:`, itemsToSync.map(i => ({ id: i.id, syncAfter: new Date(i.syncAfter).toLocaleString() })));
         const remainingItems = queue.filter(item => now < item.syncAfter);
 
         if (itemsToSync.length === 0) {

@@ -80,7 +80,7 @@ export const decryptManifestItem = async (fileUri) => {
 };
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
-const useOfflinePackages = ({ userData, isPremiumUser, isDistrictExamWindowActive }) => {
+const useOfflinePackages = ({ userData, isPremiumUser, isOfflineModeActive }) => {
   const [downloadedSubjects, setDownloadedSubjects] = useState([]);
   const [showDownloadModal, setShowDownloadModal]   = useState(false);
   const [selectedOfflineSubjects, setSelectedOfflineSubjects] = useState([]);
@@ -95,7 +95,7 @@ const useOfflinePackages = ({ userData, isPremiumUser, isDistrictExamWindowActiv
 
   // During the district exam window every user gets access,
   // otherwise only premium users can download.
-  const canAccessOffline = isPremiumUser || isDistrictExamWindowActive;
+  const canAccessOffline = isPremiumUser || isOfflineModeActive;
 
   // ── Manifest ────────────────────────────────────────────────────────────────
   const loadLocalManifest = async () => {
@@ -116,7 +116,7 @@ const useOfflinePackages = ({ userData, isPremiumUser, isDistrictExamWindowActiv
 
     // During the district window, free users can download freely.
     // Outside the window, free users hit the 4-subject cap.
-    if (!isPremiumUser && !isDistrictExamWindowActive) {
+    if (!isPremiumUser && !isOfflineModeActive) {
       const total = downloadedSubjects.length + selectedOfflineSubjects.length;
       if (total >= 4) { setShowUpgradeModal(true); return; }
     }

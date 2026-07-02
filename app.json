@@ -2,7 +2,7 @@
   "expo": {
     "name": "Home Edu",
     "slug": "home-edu",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.fsdgroup.homeedu",
       "icon": "./assets/icon.png",
-      "buildNumber": "9", 
+      "buildNumber": "10", 
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "HomeEdu uses your photo library to allow you to upload and set custom profile thumbnails and submit photos of your assignments.",
@@ -31,7 +31,7 @@
         "backgroundColor": "#864AF9"
       },
       "package": "com.fsdgroup.homeedu",
-      "versionCode": 2
+      "versionCode": 10
     },
     "web": {
       "favicon": "./assets/icon_favicon.png"

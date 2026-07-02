@@ -19,7 +19,7 @@ import QuestionNumberStrip from '../../components/QuestionNumberStrip';
 import CalculatorModal from '../../components/CalculatorModal';
 import { updateStatsWidget } from '../../src/utils/widgetHelper';
 // ── Shared district window — single source of truth for the whole app ─────────
-import { isWindowActiveNow } from '../../src/utils/districtWindow';
+import useDistrictWindow, { isWindowActiveNow } from '../../src/utils/districtWindow';
 
 // ── Split files ───────────────────────────────────────────────────────────────
 import styles from './questionStyles';
@@ -66,7 +66,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
   const [showNarrationExpanded, setShowNarrationExpanded] = useState(false);
-
+  const { isOfflineModeActive } = useDistrictWindow();
   // ── Animations ──────────────────────────────────────────────────────────────
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -195,75 +195,173 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
       const raw = await AsyncStorage.getItem('@offline_reports_queue');
       const queue = raw ? JSON.parse(raw) : [];
 
-      let syncAfter = Date.now(); // default: sync as soon as online
+      let syncAfter;
 
       if (isForcedOffline) {
-        // Schedule sync to happen after 12:30 PM WAT + a random 1–30 min delay
-        // to spread server load when the window closes.
-        const now = new Date();
-        const wat = new Date(now.getTime() + 60 * 60 * 1000);
-        wat.setUTCHours(12, 30, 0, 0); // 12:30 PM WAT
-        const targetUTC = wat.getTime() - 60 * 60 * 1000;
-        const randomDelay = Math.floor(Math.random() * 30 * 60 * 1000) + 60 * 1000;
-        syncAfter = targetUTC + randomDelay;
+        // 🛡️ DISTRICT WINDOW SPREAD: 1 to 5 minutes
+        const minDelay = 60 * 1000;
+        const maxDelay = 2 * 60 * 1000;
+        const randomDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+        syncAfter = Date.now() + randomDelay;
+      } else {
+        // 🛜 NORMAL NETWORK DROP: 5 to 30 seconds
+        const minDelay = 5 * 1000;
+        const maxDelay = 30 * 1000;
+        const randomDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+        syncAfter = Date.now() + randomDelay;
       }
 
       queue.push({ ...reportData, syncAfter, id: Date.now().toString() });
       await AsyncStorage.setItem('@offline_reports_queue', JSON.stringify(queue));
+
+      const delayInSeconds = Math.round((syncAfter - Date.now()) / 1000);
+      console.log(`⏱️ [Queue] Report saved. Scheduled to sync in ${delayInSeconds} seconds.`);
+
+      // 🚀 THE FIX: Return the delay so the UI can format a message!
+      return delayInSeconds;
     } catch (e) {
       console.error('Failed to queue report:', e);
+      return 0; // Fallback
     }
   };
 
   // ── Report submission — offline-aware ───────────────────────────────────────
   const submitReport = async (time_taken, percentage) => {
-    let subjectCodes = null;
-    let examTitle = null;
+    console.log("➡️ [submitReport] Function started with:", { time_taken, percentage });
 
-    if (selectedSubjects?.length > 0) {
-      subjectCodes = selectedSubjects.map(s => s.slice(0, 3).toUpperCase()).join('');
-      examTitle = `${selectedSubjects.join(', ')} for ${userData.class}`;
-    }
-
-    const reportPayload = {
-      username: userData.username,
+    // Pre-define a base payload just in case a crash happens BEFORE we finish formatting strings.
+    // This guarantees the student's score and time are never lost.
+    let reportPayload = {
+      username: userData?.username || 'unknown_user',
       score: percentage,
       subtopicId, examId, time_taken,
-      class: userData.class,
-      subjectCodes, examTitle,
+      class: userData?.class || 'unknown_class',
+      subjectCodes: 'ERR',
+      examTitle: 'Fallback Title',
     };
 
-    // Use the shared checker — same logic as SubjectScreen, no duplication
-    const isForcedOffline = isWindowActiveNow();
-    const netState = await NetInfo.fetch();
-    const isActuallyOffline = !netState.isConnected || isOffline;
-
-    if (isForcedOffline) {
-      setOfflineSyncMessage("Exam recorded! 🛡️ Result will sync automatically after the exam window closes.");
-      await queueReport(reportPayload, true);
-      return;
-    }
-
-    if (isActuallyOffline) {
-      setOfflineSyncMessage("Thanks for practicing! 🛜 Connect to the internet later to sync your result.");
-      await queueReport(reportPayload, false);
-      return;
-    }
-
-    // Standard online submission
     try {
+      let subjectCodes = null;
+      let examTitle = null;
+
+      console.log("📚 [submitReport] What are the selected subjects?", selectedSubjects);
+
+      // 1. Normalize whatever garbage the route passed us into a clean Array.
+      // This absolutely prevents the .map() crash.
+      const normalizedItems = Array.isArray(selectedSubjects)
+        ? selectedSubjects
+        : (typeof selectedSubjects === 'string' && selectedSubjects.trim() !== '' ? [selectedSubjects] : []);
+
+      if (normalizedItems.length > 0) {
+        console.log("📚 [submitReport] Normalized subjects array:", normalizedItems);
+
+        // 2. Generate your ID safely (e.g., 'EVA' or 'MATENG')
+        subjectCodes = normalizedItems.map(s => {
+          const itemName = typeof s === 'string' ? s : (s?.name || s?.title || s?.subject || '');
+          return itemName ? itemName.slice(0, 3).toUpperCase() : '';
+        }).join('');
+
+        // 3. Generate the human-readable exam title
+        const titleNames = normalizedItems.map(s => typeof s === 'string' ? s : (s?.name || s?.title || s?.subject || 'Unknown'));
+        examTitle = `${titleNames.join(', ')} practice for ${userData?.class || 'Unknown Class'}`;
+      }
+
+      // Overwrite the base payload with the beautifully formatted one
+      reportPayload = {
+        username: userData?.username || 'unknown_user',
+        score: percentage,
+        subtopicId, examId, time_taken,
+        class: userData?.class || 'unknown_class',
+        subjectCodes,
+        examTitle,
+      };
+
+      console.log("📦 [submitReport] Report payload prepared:", reportPayload);
+
+      console.log("🛜 [submitReport] Checking network state...");
+      const netState = await NetInfo.fetch();
+      const isActuallyOffline = !netState.isConnected || isOffline;
+      console.log("📡 [submitReport] Network variables evaluated:", {
+        isOfflineFlag: isOffline,
+        netStateIsConnected: netState.isConnected,
+        isActuallyOffline,
+        isOfflineModeActive
+      });
+
+      // 🚀 THE FIX: Use the global Master Flag
+      if (isOfflineModeActive) {
+        console.log("🛡️ [submitReport] Master Flag is TRUE. Queuing instantly.");
+
+        // Capture the delay returned by queueReport
+        const delayInSeconds = await queueReport(reportPayload, true);
+
+        // Format it nicely for the user
+        const minutes = Math.floor(delayInSeconds / 60);
+        const seconds = delayInSeconds % 60;
+        const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds} seconds`;
+
+        setOfflineSyncMessage(`Exam recorded! 🛡️ Keep the app open. Result will sync automatically in ~${timeString}.`);
+        console.log("🛑 [submitReport] Exiting function early after Master Flag queue.");
+        return;
+      }
+
+      if (isActuallyOffline) {
+        console.log("🔌 [submitReport] Device is actually offline. Queuing report locally.");
+
+        const delayInSeconds = await queueReport(reportPayload, false);
+        const seconds = delayInSeconds % 60;
+
+        setOfflineSyncMessage(`Thanks for practicing! 🛜 Turn on your data/Wi-Fi to sync your result. (Ready in ~${seconds}s)`);
+        console.log("🛑 [submitReport] Exiting function early after offline queue.");
+        return;
+      }
+
+      console.log("🌐 [submitReport] Device is online. Attempting API submission...");
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log("⏱️ [submitReport] Timeout triggered! Aborting fetch request.");
+        controller.abort();
+      }, 5000);
+
+      console.log("📤 [submitReport] Sending POST request to /api/ExamReport...");
       const res = await fetch('https://homeedu.fsdgroup.com.ng/api/ExamReport', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reportPayload),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+      console.log(`📥 [submitReport] Received response with HTTP status: ${res.status}`);
+
+      // FIX: Force a manual throw if the server is overwhelmed (500/503)
+      if (!res.ok) {
+        console.error(`🚨 [submitReport] Response NOT ok. Throwing error for status: ${res.status}`);
+        throw new Error(`Server overloaded with status: ${res.status}`);
+      }
+
       const data = await res.json();
-      if (res.ok || data.status === 200) await refreshStats();
+      console.log("📄 [submitReport] Parsed JSON response:", data);
+
+      if (data.status === 200 || data.success) {
+        console.log("✅ [submitReport] API returned success. Refreshing stats...");
+        await refreshStats();
+        console.log("🔄 [submitReport] Stats refreshed successfully.");
+      } else {
+        console.error("⚠️ [submitReport] API returned failure in JSON payload. Throwing error.");
+        throw new Error('API returned failure status in JSON payload');
+      }
+
     } catch (error) {
-      console.error('❌ Error submitting report:', error);
-      // Network dropped exactly on submit — save locally
+      // THIS CATCHES EVERYTHING: API failures, timeouts, AND frontend JS crashes.
+      console.error('❌ [submitReport] Error caught in try-catch block:', error.message);
+
+      // Now, if the server chokes, the network drops, or a string crashes, it GUARANTEES a queue.
+      console.log("🗂️ [submitReport] Forcing local queue due to error.");
       await queueReport(reportPayload, false);
-      setOfflineSyncMessage("Network dropped. 🛜 Result saved locally and will sync later.");
+      setOfflineSyncMessage("Network unstable. 🛜 Result saved locally and will sync later.");
+      console.log("🏁 [submitReport] Fallback error queueing complete.");
     }
   };
 
@@ -360,22 +458,36 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
   // ── Results ─────────────────────────────────────────────────────────────────
   const computeResults = () => {
+    console.log("➡️ [computeResults] Function started");
+
     const correct = questions.filter(q => q.isCorrect).length;
     const percentage = (correct / questions.length) * 100;
     const timeTaken = getTimeTaken();
 
-    if (type === 'schoolWork') submitReport(timeTaken, percentage);
+    console.log(`📊 [computeResults] Metrics calculated: Correct=${correct}/${questions.length}, Percentage=${percentage}%, TimeTaken=${timeTaken}`);
+    console.log(`📝 [computeResults] Current quiz type: ${type}`);
+
+    if (type === 'schoolWork') {
+      console.log("🏫 [computeResults] Type is 'schoolWork'. Submitting report now...");
+      submitReport(timeTaken, percentage);
+    }
 
     if (questions.length < 8 && type !== 'schoolWork') {
+      console.log("⚠️ [computeResults] FATAL: Questions < 8 AND not 'schoolWork'. Showing Thanks Modal and EXITING function early!");
       setShowThanksModal(true);
       return;
     }
 
+    console.log("✅ [computeResults] Passed < 8 check. Setting results and showing modal.");
     setResults({ correct, total: questions.length, percentage });
     setIsModalVisible(true);
 
-    if (type !== 'schoolWork') submitReport(timeTaken, percentage);
+    if (type !== 'schoolWork') {
+      console.log("🚀 [computeResults] Type is not 'schoolWork'. Submitting report now...");
+      submitReport(timeTaken, percentage);
+    }
 
+    console.log(`🎓 [computeResults] Setting passed status. Score >= 70: ${percentage >= 70}`);
     setPassed(percentage >= 70);
   };
 

@@ -1,31 +1,18 @@
 /**
- * districtWindow.js  —  SINGLE SOURCE OF TRUTH
- * ─────────────────────────────────────────────
- * Place this at:  src/utils/districtWindow.js
- *
- * Import the hook anywhere you need reactive state:
- *   import useDistrictWindow from '../src/utils/districtWindow';
- *   const isDistrictExamWindowActive = useDistrictWindow();
- *
- * Import the raw checker when you need a one-shot boolean
- * (e.g. inside submitReport before an async operation):
- *   import { isWindowActiveNow } from '../src/utils/districtWindow';
- *   if (isWindowActiveNow()) { ... }
- *
- * Window: Sunday 08:30 – 12:30 WAT (UTC+1)
+ * districtWindow.js  —  SINGLE SOURCE OF TRUTH (Time & Emergency Kill Switch)
  * ─────────────────────────────────────────────
  */
 
-import { useState, useEffect, useRef } from 'react';
-
-// ── Pure function — no React, safe to call anywhere ───────────────────────────
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
+const DistrictContext = createContext(null);
+// ── Pure function — local time check (Safe to call anywhere) ──────────────────
 export const isWindowActiveNow = () => {
   const now = new Date();
   // Shift UTC → WAT (Nigeria = UTC+1)
   const wat = new Date(now.getTime() + 60 * 60 * 1000);
-  const day = wat.getUTCDay(); // 0 = Sunday
+  const day = wat.getUTCDay(); // 0 = Sunday, 6 = Saturday
 
-  if (day !== 7) return false; // Only Saturday
+  if (day !== 6) return false; // Saturday
 
   const minutes = wat.getUTCHours() * 60 + wat.getUTCMinutes();
   const start   = 8 * 60 + 30;  // 08:30 WAT
@@ -34,19 +21,68 @@ export const isWindowActiveNow = () => {
   return minutes >= start && minutes <= end;
 };
 
-// ── React hook — re-checks every 60 s, auto-flips when window opens/closes ───
-const useDistrictWindow = () => {
-  const [active, setActive] = useState(isWindowActiveNow);
+
+// 2. Create the Provider Wrapper
+export const DistrictWindowProvider = ({ children }) => {
+  const [isDistrictTime, setIsDistrictTime] = useState(isWindowActiveNow);
+  const [isForcedOffline, setIsForcedOffline] = useState(false);
+  const [offlineMessage, setOfflineMessage] = useState('');
+
   const timerRef = useRef(null);
+  const forcedOfflineRef = useRef(false);
+
+  const checkKillSwitch = async () => {
+    if (forcedOfflineRef.current) return;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const response = await fetch('https://fsdgroup.com.ng/Edu/app-status.json', { signal: controller.signal, cache: 'no-store' });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const config = await response.json();
+        if (config.forceOffline) {
+          forcedOfflineRef.current = true;
+          setIsForcedOffline(true);
+          setOfflineMessage(config.message);
+        }
+      }
+    } catch (error) { console.log("Health check silent fail:", error.message); }
+  };
 
   useEffect(() => {
+    setIsDistrictTime(isWindowActiveNow());
+    checkKillSwitch();
+
     timerRef.current = setInterval(() => {
-      setActive(isWindowActiveNow());
+      setIsDistrictTime(isWindowActiveNow());
+      checkKillSwitch();
     }, 60_000);
+
     return () => clearInterval(timerRef.current);
   }, []);
 
-  return active;
+  // The shared state
+  const value = {
+    isDistrictExamWindowActive: isDistrictTime,
+    isForcedOffline,
+    setIsForcedOffline: (val) => {
+        forcedOfflineRef.current = val;
+        setIsForcedOffline(val);
+    },
+    offlineMessage,
+    isOfflineModeActive: isDistrictTime || isForcedOffline 
+  };
+
+  return (
+    <DistrictContext.Provider value={value}>
+      {children}
+    </DistrictContext.Provider>
+  );
 };
 
-export default useDistrictWindow;
+// 3. Export the custom hook
+const useDistrictWindow = () => useContext(DistrictContext);
+
+// Bring back the default export so your wrappers don't break!
+export default useDistrictWindow

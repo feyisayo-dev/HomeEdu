@@ -17,6 +17,7 @@ import JoinSchoolModal from '../../components/JoinMySchool';
 import ParentEmailCheck from '../../components/ParentModal';
 import NeoAlert from '../../components/NeoAlert';
 import { updateStatsWidget } from '../../src/utils/widgetHelper';
+import useDistrictWindow from '../../src/utils/districtWindow';
 
 // ── Split files ───────────────────────────────────────────────────────────────
 import styles from './dashboardStyles';
@@ -33,7 +34,7 @@ import Footer from './Footer';
 const DashboardContent = ({ route, navigation }) => {
   const { start, canStart, stop, isActive, scrollViewRef } = useTutorial();
   const { userData, setUserData } = useUser();
-
+  const { setIsForcedOffline } = useDistrictWindow();
   const [activeScreenTab, setActiveScreenTab] = useState('dashboard');
   const [modalVisible, setModalVisible] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -42,7 +43,6 @@ const DashboardContent = ({ route, navigation }) => {
   const tutorialHasStarted = useRef(false);
   const notificationSetupDone = useRef(false);
   const notificationTimeout = useRef(null);
-
   // ── Redirect if no user ───────────────────────────────────────────────────
   useEffect(() => {
     if (!userData) {
@@ -51,7 +51,75 @@ const DashboardContent = ({ route, navigation }) => {
       else navigation.replace('Login');
     }
   }, [userData]);
+  const closeAlert = () => {
+    setNeoAlertConfig(prev => ({
+      ...prev,
+      visible: false
+    }));
+  };
+  const checkServerHealthAndConfig = async () => {
+    try {
+      // 1. Setup a 3-second timeout (Don't let the user wait forever)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
+      // 2. Fetch the static JSON config
+      const response = await fetch('https://fsdgroup.com.ng/Edu/app-status.json', {
+        signal: controller.signal,
+        cache: 'no-store' // Always get the latest
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error('Server returned an error');
+
+      const config = await response.json();
+
+      if (config.forceOffline) {
+        setNeoAlertConfig({
+          visible: true,
+          title: "Traffic Cop Active 🚦",
+          message: config.message || "We are currently hosting a massive test! Switching you to local mode.",
+          buttons: [{ text: "Got it", onPress: handleGoOffline }] // ✅ Perfect routing
+        });
+      }
+
+    } catch (error) {
+      console.log("Server health check failed:", error.message);
+      triggerOfflinePrompt();
+    }
+  };
+
+  const triggerOfflinePrompt = () => {
+    setNeoAlertConfig({
+      visible: true,
+      title: "Server Overload ⚠️",
+      message: "Our servers are experiencing heavy traffic right now. Would you like to switch to Offline Mode to keep practicing?",
+      buttons: [
+        { text: "Retry", style: "cancel", onPress: () => checkServerHealthAndConfig() },
+        { text: "Go Offline", onPress: () => handleGoOffline() }
+      ]
+    });
+  };
+
+  // Inside your Dashboard component
+
+  const handleGoOffline = () => {
+    closeAlert();
+
+    // 1. Manually force the global state to offline
+    setIsForcedOffline(true);
+
+    // 2. Move the user to the Subject screen
+    // (Ensure 'Subject' matches the name in your Stack Navigator)
+    navigation.navigate('Subject');
+  };
+
+  useEffect(() => {
+    if (!dash.isDistrictWindowActive) {
+      checkServerHealthAndConfig();
+    }
+  }, []);
   // ── Main data hook ────────────────────────────────────────────────────────
   const dash = useDashboard({ userData, setUserData, navigation });
 

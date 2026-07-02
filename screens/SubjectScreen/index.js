@@ -16,93 +16,136 @@ import styles from './subjectStyles';
 import useDistrictWindow from './useDistrictWindow';
 import useOfflinePackages from './useOfflinePackages';
 import DownloadModal from './DownloadModal';
+import NeoAlert from '../../components/NeoAlert';
 
 const SubjectScreen = ({ navigation }) => {
   const { userData } = useUser();
 
   // ── Online data ─────────────────────────────────────────────────────────────
-  const [subjects, setSubjects]           = useState([]);
-  const [schoolWork, setSchoolWork]       = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [schoolWork, setSchoolWork] = useState([]);
   const [schoolDetails, setSchoolDetails] = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // ── Network ─────────────────────────────────────────────────────────────────
-  const [isOffline, setIsOffline]               = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [isNetworkOffline, setIsNetworkOffline] = useState(false);
 
   // ── Decrypt overlay ─────────────────────────────────────────────────────────
   const [isDecrypting, setIsDecrypting] = useState(false);
 
   // ── District window + access rules ──────────────────────────────────────────
-  const isDistrictExamWindowActive = useDistrictWindow();
+  const {
+    isForcedOffline,
+    setIsForcedOffline,
+    offlineMessage,
+    isOfflineModeActive // 👈 This is the only one we need now!
+  } = useDistrictWindow();
   const isPremiumUser = ['beta', 'paid'].includes(userData?.status ?? '');
 
   // ── Offline packages hook ────────────────────────────────────────────────────
   const offline = useOfflinePackages({
     userData,
     isPremiumUser,
-    isDistrictExamWindowActive,
+    isOfflineModeActive, // ✅ New way (checks clock AND Admin Kill Switch)
   });
+  const [neoAlertConfig, setNeoAlertConfig] = useState({
+    visible: false, title: '', message: '', buttons: []
+  });
+  const closeAlert = () => setNeoAlertConfig(prev => ({ ...prev, visible: false }));
+
+  // When the window opens OR the kill switch is flipped mid-session
+  useEffect(() => {
+    if (isOfflineModeActive) {
+      setIsOffline(true);
+      setLoading(false);
+
+      // If it's the emergency kill switch, show the NeoAlert!
+      if (isForcedOffline && offline.downloadedSubjects.length > 0) {
+        setNeoAlertConfig({
+          visible: true,
+          title: "Traffic Cop Active 🚦",
+          message: offlineMessage,
+          buttons: [{ text: "Awesome", onPress: closeAlert }]
+        });
+      } else if (isForcedOffline && offline.downloadedSubjects.length === 0) {
+        setNeoAlertConfig({
+          visible: true,
+          title: "Server Overload ⚠️",
+          message: "Our servers are maxed out, and you have no offline subjects saved. Try downloading a practice pack now.",
+          buttons: [
+            { text: "Cancel", style: "cancel", onPress: closeAlert },
+            { text: "Try Downloading", onPress: () => { closeAlert(); offline.setShowDownloadModal(true); } }
+          ]
+        });
+      }
+    } else {
+      setIsOffline(isNetworkOffline);
+    }
+  }, [isOfflineModeActive, isForcedOffline, isNetworkOffline]);
 
   // ── NetInfo listener ─────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setTimeout(() => {
-        // During the district exam window the app behaves as if it is fully
-        // offline regardless of the actual network connection — no API calls
-        // are made and only downloaded subjects are shown.
         const networkOffline = !state.isConnected;
         setIsNetworkOffline(networkOffline);
-        setIsOffline(networkOffline || isDistrictExamWindowActive);
+        // FIX: Must check the MASTER offline flag, not just the district window!
+        setIsOffline(networkOffline || isOfflineModeActive);
       }, 1000);
     });
     offline.loadLocalManifest();
     return () => unsubscribe();
-  }, [isDistrictExamWindowActive]);
+  }, [isOfflineModeActive]); // 👈 Dependency updated
 
-  // When the district window opens/closes mid-session, sync isOffline immediately.
-  useEffect(() => {
-    if (isDistrictExamWindowActive) {
-      // Window just opened — force offline mode, no network calls
-      setIsOffline(true);
-      setLoading(false);
-    } else {
-      // Window just closed — restore real network state
-      setIsOffline(isNetworkOffline);
-    }
-  }, [isDistrictExamWindowActive]);
 
   // ── Fetch online data when connection available ──────────────────────────────
   useEffect(() => {
-    // Hard guard: never touch the API during the district exam window
-    if (isDistrictExamWindowActive) {
+    // FIX: Hard guard against ANY offline mode (District OR Admin Forced)
+    if (isOfflineModeActive) {
       setLoading(false);
       return;
     }
     if (!isOffline) fetchOnlineData();
     else setLoading(false);
-  }, [userData?.class, isOffline, isDistrictExamWindowActive]);
+  }, [userData?.class, isOffline, isOfflineModeActive]); // 👈 Dependency updated
 
   const fetchOnlineData = async () => {
-    // Safety net — should never be reached during the window, but just in case
-    if (isDistrictExamWindowActive) return;
+    // FIX: Safety net blocks if the master offline flag is true
+    if (isOfflineModeActive) return;
 
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
+
+      // ⏱️ CTO Pro-Tip: Add a timeout (e.g., 5000ms). 
+      // If the server is overloaded, we don't want the student staring at a spinner for 30 seconds.
       const [subjectsRes, workRes] = await Promise.allSettled([
-        axios.post('https://homeedu.fsdgroup.com.ng/api/subjects', { class: userData.class }),
+        axios.post('https://homeedu.fsdgroup.com.ng/api/subjects',
+          { class: userData.class },
+          { timeout: 5000 } // Fail fast!
+        ),
         axios.get('https://homeedu.fsdgroup.com.ng/api/student/school-work', {
           headers: { Authorization: `Bearer ${token}` },
+          timeout: 5000 // Fail fast!
         }),
       ]);
 
+      // Check if the API is returning HTML error pages (500 errors) or just fully failed
+      const isSubjectsFailed = subjectsRes.status === 'rejected' || subjectsRes.value?.status >= 500;
+      const isWorkFailed = workRes.status === 'rejected' || workRes.value?.status >= 500;
+
+      if (isSubjectsFailed && isWorkFailed) {
+        // 🚨 SERVER IS DEAD OR OVERLOADED! Pull the fire alarm!
+        throw new Error("Server completely unresponsive");
+      }
+
+      // --- Normal Success Logic ---
       if (workRes.status === 'fulfilled' && workRes.value.data.status === 200) {
         setSchoolWork(workRes.value.data.data);
         setSchoolDetails(workRes.value.data.school_details || null);
       } else {
-        console.warn('schoolWork fetch failed:', workRes.reason ?? workRes.value?.data);
         setSchoolWork([]);
         setSchoolDetails(null);
       }
@@ -112,8 +155,11 @@ const SubjectScreen = ({ navigation }) => {
       } else {
         setError('Failed to load general subjects.');
       }
-    } catch {
-      setError('An error occurred while fetching data.');
+
+    } catch (error) {
+      console.log("Subject Screen API crashed:", error.message);
+      // 🔥 TRIGGER THE FORCED OFFLINE MODE GLOBALLY
+      setIsForcedOffline(true);
     } finally {
       setLoading(false);
     }
@@ -130,13 +176,13 @@ const SubjectScreen = ({ navigation }) => {
 
   const startSchoolWork = (work) => {
     navigation.navigate('Instruction', {
-      type:        work.district_id ? 'DistrictWork' : 'schoolWork',
-      subtopicId:  work.subtopicId,
-      subject:     work.subject,
-      title:       work.title,
-      duration:    work.duration_minutes,
+      type: work.district_id ? 'DistrictWork' : 'schoolWork',
+      subtopicId: work.subtopicId,
+      subject: work.subject,
+      title: work.title,
+      duration: work.duration_minutes,
       instructions: work.instructions,
-      userClass:   work.target_class,
+      userClass: work.target_class,
       teacherName: work.district_id ? 'District Admin' : work.teacher?.name,
     });
   };
@@ -147,14 +193,14 @@ const SubjectScreen = ({ navigation }) => {
     try {
       const encryptedString = await FileSystem.readAsStringAsync(manifestItem.fileUri);
       const rawKey = process.env.EXPO_PUBLIC_OFFLINE_ENCRYPTION_KEY;
-      const rawIv  = process.env.EXPO_PUBLIC_OFFLINE_ENCRYPTION_IV;
+      const rawIv = process.env.EXPO_PUBLIC_OFFLINE_ENCRYPTION_IV;
 
       if (!rawKey || !rawIv) throw new Error('Security keys missing.');
 
-      const key       = CryptoJS.enc.Utf8.parse(rawKey);
-      const iv        = CryptoJS.enc.Utf8.parse(rawIv);
+      const key = CryptoJS.enc.Utf8.parse(rawKey);
+      const iv = CryptoJS.enc.Utf8.parse(rawIv);
       const decrypted = CryptoJS.AES.decrypt(encryptedString, key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-      const json      = decrypted.toString(CryptoJS.enc.Utf8);
+      const json = decrypted.toString(CryptoJS.enc.Utf8);
       if (!json) throw new Error('Decryption empty.');
 
       const parsedData = JSON.parse(json);
@@ -163,23 +209,23 @@ const SubjectScreen = ({ navigation }) => {
         navigation.navigate('Topic', {
           isOffline: true,
           offlineTopics: parsedData.data.topics,
-          subject:   manifestItem.subjectName,
+          subject: manifestItem.subjectName,
           userClass: userData.class,
         });
       } else {
         const examData = parsedData.data;
         navigation.navigate('Instruction', {
-          type:         manifestItem.type === 'district' ? 'DistrictWork' : 'schoolWork',
-          subtopicId:   examData.subtopicId,
-          subject:      examData.subject,
-          title:        examData.title,
-          duration:     examData.duration_minutes,
+          type: manifestItem.type === 'district' ? 'DistrictWork' : 'schoolWork',
+          subtopicId: examData.subtopicId,
+          subject: examData.subject,
+          title: examData.title,
+          duration: examData.duration_minutes,
           instructions: examData.instructions,
-          userClass:    examData.target_class,
-          teacherName:  manifestItem.type === 'district' ? 'District Admin' : (examData.teacher?.name || 'Teacher'),
-          openDate:     examData.open_date,
-          closeDate:    examData.close_date,
-          isOffline:    true,
+          userClass: examData.target_class,
+          teacherName: manifestItem.type === 'district' ? 'District Admin' : (examData.teacher?.name || 'Teacher'),
+          openDate: examData.open_date,
+          closeDate: examData.close_date,
+          isOffline: true,
           offlineQuestions: examData.questions,
         });
       }
@@ -199,7 +245,7 @@ const SubjectScreen = ({ navigation }) => {
     );
   }
 
-  const districtMocks     = schoolWork.filter(w => w.district_id !== null);
+  const districtMocks = schoolWork.filter(w => w.district_id !== null);
   const schoolAssignments = schoolWork.filter(w => w.district_id === null);
 
   // During district window: show download button to EVERYONE (free + premium)
@@ -211,7 +257,7 @@ const SubjectScreen = ({ navigation }) => {
     <View style={styles.container}>
 
       {/* ── Banners ── */}
-      {isDistrictExamWindowActive ? (
+      {isOfflineModeActive ? (
         <View style={[styles.offlineBanner, { backgroundColor: '#6D28D9' }]}>
           <Ionicons name="school" size={20} color="#FFFFFF" />
           <Text style={styles.offlineBannerText}>🏫 District Exam Window Active — Offline Access Free for Everyone!</Text>
