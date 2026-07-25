@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Video } from 'expo-av';
 import NetInfo from '@react-native-community/netinfo';
-
+import * as Speech from 'expo-speech';
 import { useUser } from '../../context/UserContext';
 import { BackgroundMusicContext } from '../../context/BackgroundMusicProvider';
 import QuestionRenderer from '../../renderer/QuestionRenderer';
@@ -32,6 +32,52 @@ import useTimer from './useTimer';
 import { renderContentWithMath } from './renderFormatted';
 
 const IN_FLIGHT_MODE = true;
+
+const cleanTextForSpeech = (rawText) => {
+  if (!rawText) return "";
+  return String(rawText)
+    // Replace Math LaTeX with a friendly word so it doesn't read the code
+    .replace(/\$\$.*?\$\$/g, " this equation ")
+    // Remove Bold tags
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    // Remove Underline tags
+    .replace(/__(.*?)__/g, "$1")
+    // Remove Color tags
+    .replace(/\{#[A-Za-z0-9]+\}(.*?)\{\/\}/g, "$1")
+    // Replace underscores used for "Fill in the gaps"
+    .replace(/_+/g, " blank ")
+    .trim();
+};
+
+// --- CORE SPEECH FUNCTION ---
+const readQuestionAloud = (question) => {
+  // Stop anything currently speaking before starting a new one
+  Speech.stop();
+
+  if (!question) return;
+
+  const cleanQ = cleanTextForSpeech(question.content);
+  let textToSpeak = cleanQ + ". ";
+
+  // Append options if it's a multiple choice question
+  if (
+    (question.type === 'multiple_choice' || question.type === 'true_false') &&
+    question.options
+  ) {
+    textToSpeak += "Here are the options. ";
+    question.options.forEach((opt, index) => {
+      const cleanOpt = cleanTextForSpeech(opt);
+      textToSpeak += `Option ${index + 1}: ${cleanOpt}. `;
+    });
+  }
+
+  // Start speaking
+  Speech.speak(textToSpeak, {
+    rate: 0.85, // Slightly slower, better for Grades 1-6
+    pitch: 1.0,
+    language: 'en', // Set to preferred locale, e.g., 'en-NG' or 'en-GB'
+  });
+};
 
 const EnhancedQuestionScreen = ({ route, navigation }) => {
   const { userData } = useUser();
@@ -67,6 +113,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [exitModalVisible, setExitModalVisible] = useState(false);
   const [showNarrationExpanded, setShowNarrationExpanded] = useState(false);
   const { isOfflineModeActive } = useDistrictWindow();
+  
   // ── Animations ──────────────────────────────────────────────────────────────
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -86,6 +133,31 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   });
 
   const hasCountdown = (type === 'schoolWork' || type === 'DistrictWork') && duration > 0;
+
+  // Hoisted variables for safe effect dependencies
+  const currentQuestion = questions[currentIndex];
+  const currentQuestionId = currentQuestion?.QuestionId;
+  const isCurrentSubmitted = submittedIds[currentQuestionId];
+
+  useEffect(() => {
+    // (Adjust the array to match exactly how classes are stored in your DB)
+    const kidsClasses = [
+      'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'];
+
+    const shouldAutoSpeak = kidsClasses.includes(userData?.class);
+    console.log("🗣️ [useEffect] Checking if we should auto-speak the question aloud:", shouldAutoSpeak);
+    
+    // 2. Play if applicable
+    if (shouldAutoSpeak && currentQuestion) {
+      readQuestionAloud(currentQuestion);
+    }
+
+    // 3. Cleanup: Stop speaking immediately if they manually move to the next question
+    // or leave the screen before the audio finishes.
+    return () => {
+      Speech.stop();
+    };
+  }, [currentIndex, currentQuestionId, userData?.class]); // Using currentQuestionId prevents re-renders (like answering a question) from killing the audio
 
   // ── Progress animation ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -516,9 +588,6 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
     );
   }
 
-  const currentQuestion = questions[currentIndex];
-  const isCurrentSubmitted = submittedIds[currentQuestion?.QuestionId];
-
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <View style={styles.mainContainer}>
@@ -545,6 +614,22 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
           <TouchableOpacity onPress={() => setCalculatorVisible(true)} style={{ backgroundColor: '#eee', padding: 8, borderRadius: 20, marginRight: 10, borderWidth: 1, borderColor: '#ccc' }}>
             <Text style={{ fontSize: 16 }}>🧮</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{ 
+              backgroundColor: '#eee', 
+              padding: 8, 
+              borderRadius: 20, 
+              marginRight: 10, 
+              borderWidth: 1, 
+              borderColor: '#ccc',
+              justifyContent: 'center', 
+              alignItems: 'center' 
+            }}
+            onPress={() => readQuestionAloud(currentQuestion)}
+          >
+            <Ionicons name="volume-medium" size={18} color="#864AF9" />
           </TouchableOpacity>
 
           <View style={[styles.timerContainer, timerUrgent && { backgroundColor: '#FFE5E5', borderColor: '#EF4444', borderWidth: 1, borderRadius: 8 }]}>
