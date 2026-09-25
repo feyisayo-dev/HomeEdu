@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import NetInfo from '@react-native-community/netinfo';
 import NeoBrutalistConfirmModal from '../../components/NeoBrutalistConfirmModal';
+import FloatingNavCluster from '../../components/FloatingNavCluster';
 
 import styles from './subjectStyles';
 import useDistrictWindow from './useDistrictWindow';
@@ -166,6 +167,13 @@ const SubjectScreen = ({ navigation }) => {
   };
 
   // ── Navigation helpers ───────────────────────────────────────────────────────
+  const handleBack = () => {
+    navigation.navigate('Dashboard');
+  };
+  const handleHome = () => {
+    navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
+  };
+
   const handleButtonPress = () => {
     navigation.navigate('Exam', {
       type: userData.class === 'JAMB' ? 'JAMB' : 'classExam',
@@ -448,6 +456,8 @@ const SubjectScreen = ({ navigation }) => {
           <Text style={styles.decryptingText}>Unlocking securely...</Text>
         </View>
       )}
+
+      <FloatingNavCluster onBack={handleBack} onHome={handleHome} />
     </View>
   );
 };

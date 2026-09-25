@@ -30,7 +30,21 @@ const useQuestionData = ({
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userStatus, setUserStatus] = useState('free');
-
+  console.log("useQuestionData initialized with parameters:", {
+    userData,
+    isOffline,
+    type,
+    subject,
+    topic,
+    subtopic,
+    subtopicId,
+    title,
+    userClass,
+    examId,
+    selectedSubjects,
+    offlineData,
+    offlineQuestions
+  });
   // ─── Fetch user profile ───────────────────────────────────────────────────
   const fetchUserProfile = async () => {
     if (isOffline) {
@@ -142,7 +156,7 @@ const useQuestionData = ({
 
           const token = await AsyncStorage.getItem('token');
           const cleanToken = token ? token.replace(/"/g, '') : '';
-
+          console.log("This is the payload being sent to the API:", payload);
           const response = await axios.post(
             'https://homeedu.fsdgroup.com.ng/api/ExamQuestions',
             payload,
@@ -265,7 +279,7 @@ const useQuestionData = ({
 
     fetchQuestions();
     fetchUserProfile();
-  }, [userData, isOffline]);
+  }, [userData, isOffline, type, subject, topic, subtopic, subtopicId, examId, title, userClass]);
 
   return { questions, setQuestions, loading, userStatus };
 };

@@ -113,20 +113,20 @@ const styles = StyleSheet.create({
     },
     video: { width: '100%', height: '100%' },
 
-    // Audio card
+    // Audio card (plain, non-lyrics version)
     audioContainer: {
         alignItems: 'center',
         paddingVertical: 10,
         width: '100%',
     },
     playButton: { marginTop: 10, padding: 8 },
-    playIcon: { fontSize: 28 },
+    playIcon: { fontSize: 24 },
     progressTrack: {
         width: '100%',
         height: 6,
         backgroundColor: '#eee',
         borderRadius: 3,
-        marginTop: 12,
+        marginTop: 8,
         overflow: 'hidden',
     },
     progressFill: {
@@ -202,6 +202,105 @@ const styles = StyleSheet.create({
     cellText: { fontSize: 14, fontWeight: '500' },
     horizontalItems: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
     cellBox: { padding: 4, margin: 2, backgroundColor: '#eee', borderRadius: 4, borderWidth: 1, borderColor: '#ccc' },
+
+    // --- LYRICS / MINI-PLAYER STYLES ---
+    lyricsContainer: {
+        flex: 1,
+        width: '100%',
+        alignItems: 'center',
+    },
+
+    // Spotify-style "now playing" row: album-art robot + progress + play button,
+    // replacing the old loose space-around header.
+    lyricsPlayerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        backgroundColor: '#1A1A1A',
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#000',
+        padding: 10,
+        gap: 12,
+    },
+    lyricsAlbumArt: {
+        width: 64,
+        height: 64,
+        borderRadius: 12,
+        backgroundColor: '#5CACEE20',
+        borderWidth: 2,
+        borderColor: '#000',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    lyricsPlayerInfo: {
+        flex: 1,
+        justifyContent: 'center',
+        gap: 8,
+    },
+    lyricsNowPlayingLabel: {
+        color: '#FFD93D',
+        fontSize: 12,
+        fontWeight: '900',
+        letterSpacing: 1.5,
+    },
+    lyricsPlayBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#FFD93D',
+        borderWidth: 2,
+        borderColor: '#000',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    // The fixed-height scroll window
+    lyricsBox: {
+        height: 180,
+        width: '100%',
+        marginTop: 15,
+        backgroundColor: '#121212',
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 2,
+        borderColor: '#000',
+    },
+    lyricsScrollContent: {
+        paddingVertical: 60,
+        paddingHorizontal: 16,
+    },
+    // No more fixed height here — a line's real height is measured via
+    // onLayout in LyricsCard, so it can wrap safely without overlapping
+    // the line below it. minHeight just keeps single-word lines from
+    // looking cramped.
+    lyricRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        minHeight: 34,
+        alignItems: 'center',
+        paddingVertical: 6,
+    },
+    lyricWord: {
+        fontSize: 20,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+        color: '#FFFFFF',
+        opacity: 0.3,
+        fontWeight: '900',
+    },
+    lyricWordPast: {
+        color: '#FFFFFF',
+        opacity: 0.7,
+    },
+    lyricWordActive: {
+        opacity: 1,
+        color: '#1DB954',
+        textShadowColor: 'rgba(0, 0, 0, 0.9)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 4,
+    },
 });
 
 export default styles;

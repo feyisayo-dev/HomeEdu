@@ -158,6 +158,24 @@ const ExamScreen = ({ route, navigation }) => {
         }
     };
 
+    // "Select All" only makes sense where there's no selection cap — picking
+    // every topic/subtopic one by one is tedious; JAMB/classExam have a fixed
+    // subject cap set by the exam board, so that toggle doesn't apply there.
+    const canSelectAll = (MAX_SELECTIONS[type] ?? 1) === Infinity;
+    const getItemId = (item) => {
+        if (type === 'subjectExam') return item.Topic;
+        if (type === 'topicExam') return item.Subtopic;
+        return null;
+    };
+    const allSelected = canSelectAll && subjects.length > 0 && selectedSubjects.length === subjects.length;
+    const toggleSelectAll = () => {
+        if (allSelected) {
+            setSelectedSubjects([]);
+        } else {
+            setSelectedSubjects(subjects.map(getItemId).filter(Boolean));
+        }
+    };
+
     // ── Exam label ────────────────────────────────────────────────────────
     useEffect(() => {
         const labels = { classExam: 'subject', subjectExam: 'topic', topicExam: 'subtopic', JAMB: 'JAMB subject' };
@@ -325,6 +343,11 @@ const ExamScreen = ({ route, navigation }) => {
                 {selectedSubjects.length > 0 && (
                     <Text style={styles.selectionCount}>{selectedSubjects.length} selected</Text>
                 )}
+                {canSelectAll && subjects.length > 0 && (
+                    <TouchableOpacity style={styles.selectAllBtn} onPress={toggleSelectAll}>
+                        <Text style={styles.selectAllBtnText}>{allSelected ? 'Deselect All' : 'Select All'}</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <FlatList
@@ -370,6 +393,8 @@ const styles = StyleSheet.create({
     headerCard: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4, alignItems: 'center' },
     subjectSelectionTitle: { fontSize: 22, fontWeight: '700', color: '#2D3748', textAlign: 'center', letterSpacing: 0.3 },
     selectionCount: { fontSize: 14, fontWeight: '600', color: '#864AF9', marginTop: 8, backgroundColor: '#F7F3FF', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12 },
+    selectAllBtn: { marginTop: 10, borderWidth: 1.5, borderColor: '#864AF9', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
+    selectAllBtnText: { fontSize: 13, fontWeight: '700', color: '#864AF9', letterSpacing: 0.3 },
     subjectList: { paddingBottom: 24 },
     subjectItem: { backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, borderLeftWidth: 4, borderLeftColor: '#E2E8F0', marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2, gap: 12 },
     subjectItemSelected: { borderLeftColor: '#864AF9', backgroundColor: '#F7F3FF', shadowColor: '#864AF9', shadowOpacity: 0.15, elevation: 4 },

@@ -113,7 +113,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   const [exitModalVisible, setExitModalVisible] = useState(false);
   const [showNarrationExpanded, setShowNarrationExpanded] = useState(false);
   const { isOfflineModeActive } = useDistrictWindow();
-  
+const [noQuestionsModalVisible, setNoQuestionsModalVisible] = useState(false);
   // ── Animations ──────────────────────────────────────────────────────────────
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -132,13 +132,52 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
     onTimeout: () => computeResults(),
   });
 
+  useEffect(() => {
+    if (!loading && questions.length === 0) {
+      setNoQuestionsModalVisible(true);
+    }
+  }, [loading, questions]);
+
+  // Reset per-attempt UI state whenever this screen is reused for a different
+  // subtopic/exam (React Navigation pops back to an existing 'Question' route
+  // instead of remounting it, so stale answers/results/modals must be cleared here).
+  useEffect(() => {
+    setCurrentIndex(0);
+    setUserAnswers({});
+    setSubmittedIds({});
+    setResults(null);
+    setPassed(false);
+    setIsModalVisible(false);
+    setShowThanksModal(false);
+    setNoQuestionsModalVisible(false);
+    setUnansweredModalVisible(false);
+    setNarrations({});
+    setShowNarrationExpanded(false);
+    setOfflineSyncMessage(null);
+  }, [subtopicId, examId, type]);
+  
   const hasCountdown = (type === 'schoolWork' || type === 'DistrictWork') && duration > 0;
 
   // Hoisted variables for safe effect dependencies
   const currentQuestion = questions[currentIndex];
   const currentQuestionId = currentQuestion?.QuestionId;
   const isCurrentSubmitted = submittedIds[currentQuestionId];
+  const hasNextSubtopic = route.params?.subtopicsList && route.params?.currentSubtopicIndex < route.params?.subtopicsList.length - 1;
 
+  const handleNextSubtopic = () => {
+    console.log("➡️ [handleNextSubtopic] Navigating to the next subtopic in the list.");
+    setIsModalVisible(false);
+    setNoQuestionsModalVisible(false);
+    setShowThanksModal(false);
+    navigation.navigate('Subtopic', {
+      Topic: topic,
+      Subject: subject,
+      topicId: route.params?.topicId,
+      autoStartSubtopicIndex: route.params.currentSubtopicIndex + 1,
+      isOffline: isOffline || false,
+      offlineSubtopics: offlineData
+    });
+  };
   useEffect(() => {
     // (Adjust the array to match exactly how classes are stored in your DB)
     const kidsClasses = [
@@ -146,7 +185,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
 
     const shouldAutoSpeak = kidsClasses.includes(userData?.class);
     console.log("🗣️ [useEffect] Checking if we should auto-speak the question aloud:", shouldAutoSpeak);
-    
+
     // 2. Play if applicable
     if (shouldAutoSpeak && currentQuestion) {
       readQuestionAloud(currentQuestion);
@@ -465,6 +504,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   };
 
   const handleSubmit = async () => {
+    Speech.stop();
     const currentQ = questions[currentIndex];
     const currentId = currentQ.QuestionId;
     const selected = userAnswers[currentId];
@@ -520,6 +560,7 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
   };
 
   const handleNextQuestion = () => {
+    Speech.stop();
     setShowNarrationExpanded(false);
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -617,15 +658,15 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={{ 
-              backgroundColor: '#eee', 
-              padding: 8, 
-              borderRadius: 20, 
-              marginRight: 10, 
-              borderWidth: 1, 
+            style={{
+              backgroundColor: '#eee',
+              padding: 8,
+              borderRadius: 20,
+              marginRight: 10,
+              borderWidth: 1,
               borderColor: '#ccc',
-              justifyContent: 'center', 
-              alignItems: 'center' 
+              justifyContent: 'center',
+              alignItems: 'center'
             }}
             onPress={() => readQuestionAloud(currentQuestion)}
           >
@@ -745,7 +786,27 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
         onClose={() => setPassageModalVisible(false)}
         content={currentQuestion?.passage?.Content || currentQuestion?.passage || ''}
       />
+      <Modal visible={!loading && questions.length === 0} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={{ fontSize: 40, marginBottom: 10 }}>🤷‍♂️</Text>
+            <Text style={styles.resultTitle}>No Questions Found</Text>
+            <Text style={[styles.resultText, { textAlign: 'center', marginBottom: 20 }]}>
+              There are no practice questions available for this subtopic right now.
+            </Text>
 
+            {hasNextSubtopic && (
+              <TouchableOpacity style={styles.modalButton} onPress={handleNextSubtopic}>
+                <Text style={styles.modalButtonText}>NEXT SUBTOPIC ⏭️</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#12b876', marginTop: 10 }]} onPress={() => navigation.navigate('Subtopic', { Subject: subject, Topic: topic, topicId: route.params?.topicId, isOffline: isOffline || false, offlineSubtopics: offlineData })}>
+              <Text style={[styles.modalButtonText, { color: '#fefefe' }]}>🔙 BACK TO SUBTOPICS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       {/* Results Modal */}
       <Modal visible={isModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -776,9 +837,30 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
                     </Text>
                   </View>
                 )}
+
+                {/* NEW: NEXT SUBTOPIC BUTTON */}
+                {hasNextSubtopic && (
+                  <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#FFD93D', borderColor: '#000', marginBottom: 10 }]} onPress={handleNextSubtopic}>
+                    <Text style={[styles.modalButtonText, { color: '#000' }]}>NEXT SUBTOPIC ⏭️</Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity style={styles.modalButton} onPress={() => { setIsModalVisible(false); navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] }); }}>
                   <Text style={styles.modalButtonText}>BACK TO DASHBOARD</Text>
                 </TouchableOpacity>
+
+                {/* back to subtopics */}
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: '#12b876', marginTop: 10 }]}
+                  onPress={() => {
+                    setIsModalVisible(false);
+                    navigation.navigate('Subtopic', { Subject: subject, Topic: topic, topicId: route.params?.topicId, isOffline: isOffline || false, offlineSubtopics: offlineData });
+                  }}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fefefe' }]}>🔙 BACK TO SUBTOPICS</Text>
+                </TouchableOpacity>
+
+                {/* back to previous screen */}
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#FFFFFF', marginTop: 10 }]} onPress={() => { setIsModalVisible(false); navigation.goBack(); }}>
                   <Text style={[styles.modalButtonText, { color: '#000000' }]}>🔙 BACK</Text>
                 </TouchableOpacity>
@@ -817,11 +899,27 @@ const EnhancedQuestionScreen = ({ route, navigation }) => {
                 <Text style={styles.subText}>Keep going! Every question makes you sharper.</Text>
               </>
             )}
+
+            {/* NEW: NEXT SUBTOPIC BUTTON */}
+            {hasNextSubtopic && (
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#FFD93D', borderColor: '#000', marginBottom: 10 }]} onPress={handleNextSubtopic}>
+                <Text style={[styles.modalButtonText, { color: '#000' }]}>NEXT SUBTOPIC ⏭️</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity style={styles.modalButton} onPress={() => { setShowThanksModal(false); navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] }); }}>
               <Text style={styles.modalButtonText}>BACK TO DASHBOARD</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#12b876', marginTop: 10 }]} onPress={() => { setShowThanksModal(false); navigation.goBack(); }}>
-              <Text style={[styles.modalButtonText, { color: '#fefefe' }]}>🔙 BACK</Text>
+
+            {/* back to subtopics */}
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: '#12b876', marginTop: 10 }]}
+              onPress={() => {
+                setShowThanksModal(false);
+                navigation.navigate('Subtopic', { Subject: subject, Topic: topic, topicId: route.params?.topicId, isOffline: isOffline || false, offlineSubtopics: offlineData });
+              }}
+            >
+              <Text style={[styles.modalButtonText, { color: '#fefefe' }]}>🔙 BACK TO SUBTOPICS</Text>
             </TouchableOpacity>
           </View>
         </View>

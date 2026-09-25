@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Dimensions, Animated } from 'react-native';
 import { useUser } from '../context/UserContext';
+import FloatingNavCluster from '../components/FloatingNavCluster';
 
 const { width } = Dimensions.get('window');
 
@@ -65,6 +66,15 @@ const TopicScreen = ({ route, navigation }) => {
     });
   }
 
+  // Go to the parent Subject list — not history-based goBack — so this always
+  // lands on the right screen regardless of how the stack got here.
+  const handleBack = () => {
+    navigation.navigate('Subject');
+  };
+  const handleHome = () => {
+    navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
+  };
+
   // === NEO-BRUTALIST LOADER ===
   if (loading) {
     return <NeoBrutalistLoader subject={subject} isOffline={isOffline} />;
@@ -124,6 +134,7 @@ const TopicScreen = ({ route, navigation }) => {
         onPress={handleButtonPress}>
         <Text style={styles.startButtonText}>Take Exam</Text>
       </TouchableOpacity>
+      <FloatingNavCluster onBack={handleBack} onHome={handleHome} />
     </View>
   );
 };

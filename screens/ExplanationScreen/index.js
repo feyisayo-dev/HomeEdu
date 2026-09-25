@@ -19,6 +19,7 @@ import styles, { SCREEN_WIDTH, SWIPE_THRESHOLD } from './explanationStyles';
 import useExplanation from './useExplanation';
 import TextCard from './TextCard';
 import { ImageCard, VideoCard } from './MediaCard';
+import LyricsCard from './LyricsCard';
 import AudioExplanationCard from './AudioExplanationCard';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,9 +28,9 @@ const ExplanationScreen = ({ route, navigation }) => {
 
     const {
         content, loading, error,
-        currentIndex, checkingNext,
-        handleNext, handlePrev, checkAndNavigate,
-    } = useExplanation({ subtopicId, Subtopic, subject, topic, navigation });
+        currentIndex, checkingNext, 
+        handleNext, handlePrev
+    } = useExplanation({ routeParams: route.params, navigation });
 
     const translateX = useSharedValue(0);
     const contextX = useSharedValue(0);
@@ -92,8 +93,14 @@ const ExplanationScreen = ({ route, navigation }) => {
                             {currentItem.type === 'text' && <TextCard value={currentItem.value} />}
                             {currentItem.type === 'image' && <ImageCard value={currentItem.value} />}
                             {currentItem.type === 'video' && <VideoCard value={currentItem.value} />}
-                            {currentItem.type === 'audio' && (
-                                <AudioExplanationCard value={currentItem.value} timingsUrl={currentItem.timingsUrl} />
+
+                            {/* NEW LYRICS TYPE */}
+                            {currentItem.type === 'lyrics' && (
+                                <LyricsCard
+                                    text={currentItem.text}
+                                    audioUrl={currentItem.audioUrl}
+                                    timingsUrl={currentItem.timingsUrl}
+                                />
                             )}
                         </ScrollView>
                         <View style={styles.cardCorner} />
@@ -113,7 +120,7 @@ const ExplanationScreen = ({ route, navigation }) => {
 
                 {isLastCard ? (
                     <TouchableOpacity
-                        onPress={checkAndNavigate}
+                        onPress={handleNext} // Note: We use handleNext here instead of checkAndNavigate
                         style={[styles.navButton, styles.finishButton]}
                         disabled={checkingNext}
                     >

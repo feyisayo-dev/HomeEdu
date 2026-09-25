@@ -3,19 +3,18 @@ import axios from 'axios';
 
 const BASE = 'https://homeedu.fsdgroup.com.ng/api';
 
-const useExplanation = ({ subtopicId, Subtopic, subject, topic, navigation }) => {
+const useExplanation = ({ routeParams, navigation }) => {
+    const { subtopicId } = routeParams;
     const [content, setContent] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [checkingNext, setCheckingNext] = useState(false);
+    const [checkingNext, setCheckingNext] = useState(false); // Brought this back!
 
-    // ── Fetch on mount ────────────────────────────────────────────────────────
     useEffect(() => {
         const fetchExplanation = async () => {
             try {
                 const response = await axios.get(`${BASE}/explanation/${subtopicId}`);
-
                 if (response.data.status === 200) {
                     const rawDataList = response.data.data;
                     if (rawDataList && rawDataList.length > 0) {
@@ -23,20 +22,17 @@ const useExplanation = ({ subtopicId, Subtopic, subject, topic, navigation }) =>
                             if (!item.Content) return [];
                             try {
                                 const parsed = JSON.parse(item.Content);
+                                if (Array.isArray(parsed) && parsed.length === 3 && parsed[2].type === 'timings') {
+                                    return [{ type: 'lyrics', text: parsed[0].value, audioUrl: parsed[1].value, timingsUrl: parsed[2].value }];
+                                }
                                 return Array.isArray(parsed) ? parsed : [parsed];
                             } catch (e) { return []; }
                         });
-
                         if (allCards.length > 0) setContent(allCards);
                         else setError('No content found.');
-                    } else {
-                        setError('Explanation content is missing.');
-                    }
-                } else {
-                    setError('Failed to load explanation.');
-                }
+                    } else { setError('Explanation content is missing.'); }
+                } else { setError('Failed to load explanation.'); }
             } catch (err) {
-                console.error(err);
                 setError('An error occurred.');
             } finally {
                 setLoading(false);
@@ -45,46 +41,24 @@ const useExplanation = ({ subtopicId, Subtopic, subject, topic, navigation }) =>
         fetchExplanation();
     }, [subtopicId]);
 
-    // ── Navigation to next screen (examples or questions) ─────────────────────
-    const navigateToQuestion = () => {
-        navigation.navigate('Question', {
-            subtopicId,
-            subtopic: Subtopic,
-            selectedSubjects: [Subtopic],
-            type: 'subtopicExam',
-            subject: subject || "Unknown Subject",
-            topic: topic || "Unknown Topic",
-        });
-    };
-
-    const checkAndNavigate = async () => {
-        setCheckingNext(true);
-        try {
-            const response = await axios.get(`${BASE}/examples/${subtopicId}`);
-
-            if (response.data && response.data.status === 200 && response.data.data.length > 0) {
-                navigation.navigate('Example', { subtopicId, subtopic: Subtopic, subject, topic });
-            } else {
-                navigateToQuestion();
-            }
-        } catch (error) {
-            if (error.response && error.response.status === 404) {
-                navigateToQuestion();
-            } else {
-                console.error("Error checking examples:", error);
-                navigateToQuestion();
-            }
-        } finally {
-            setCheckingNext(false);
-        }
-    };
-
-    // ── Card index nav ──────────────────────────────────────────────────────
-    const handleNext = () => {
+    const handleNext = async () => {
         if (currentIndex < content.length - 1) {
             setCurrentIndex(prev => prev + 1);
         } else {
-            checkAndNavigate();
+            // Waterfall: Check Examples -> Fallback to Questions
+            setCheckingNext(true);
+            try {
+                const response = await axios.get(`${BASE}/examples/${subtopicId}`);
+                if (response.data && response.data.status === 200 && response.data.data.length > 0) {
+                    navigation.navigate('Example', { ...routeParams });
+                    return;
+                }
+            } catch (error) {}
+            finally {
+                setCheckingNext(false);
+            }
+            
+            navigation.navigate('Question', { ...routeParams, type: 'subtopicExam' });
         }
     };
 
@@ -92,12 +66,7 @@ const useExplanation = ({ subtopicId, Subtopic, subject, topic, navigation }) =>
         if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
     };
 
-    return {
-        content, loading, error,
-        currentIndex, setCurrentIndex,
-        checkingNext,
-        handleNext, handlePrev, checkAndNavigate,
-    };
+    return { content, loading, error, currentIndex, checkingNext, handleNext, handlePrev };
 };
 
 export default useExplanation;

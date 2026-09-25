@@ -15,9 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DropDownPicker from "react-native-dropdown-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from '@expo/vector-icons';
-
-
 import { Image } from "react-native";
+
 export default function RegisterScreen({ navigation }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -40,6 +39,9 @@ export default function RegisterScreen({ navigation }) {
   const [open, setOpen] = useState(false);
   const [currentStage, setCurrentStage] = useState(1);
 
+  // --- NEW: error state ---
+  const [errors, setErrors] = useState({});
+
   const totalStages = 4;
   const dropdownItems = useMemo(() => {
     return countryList.map((country) => ({
@@ -55,16 +57,14 @@ export default function RegisterScreen({ navigation }) {
       ),
     }));
   }, [countryList]);
+
   useEffect(() => {
     const fetchData = async () => {
-
       try {
         const classResponse = await axios.get(
           "https://homeedu.fsdgroup.com.ng/api/getClassForUser"
         );
         const classData = classResponse.data;
-
-
         if (classData.status === 200 && classData.class) {
           setClasses(classData.class);
         } else {
@@ -74,10 +74,8 @@ export default function RegisterScreen({ navigation }) {
         console.error("Error fetching classes:", error.message);
       }
 
-
       try {
         const cachedCountries = await AsyncStorage.getItem("countries");
-
         if (cachedCountries) {
           console.log("Loaded countries from AsyncStorage");
           setCountryList(JSON.parse(cachedCountries));
@@ -86,7 +84,6 @@ export default function RegisterScreen({ navigation }) {
             "https://homeedu.fsdgroup.com.ng/api/FetchAllCountries"
           );
           const countryData = countryResponse.data;
-
           if (countryData.countries?.length > 0) {
             await AsyncStorage.setItem(
               "countries",
@@ -99,7 +96,6 @@ export default function RegisterScreen({ navigation }) {
         }
       } catch (error) {
         console.error("Error fetching countries:", error.message);
-
       }
     };
 
@@ -115,7 +111,79 @@ export default function RegisterScreen({ navigation }) {
 
   const showDatePicker = () => setShowPicker(true);
 
+  // --- NEW: real‑time validation handler ---
+  const handleValidation = (field, value) => {
+    let errorMsg = null;
+
+    switch (field) {
+      case "username":
+        setUsername(value);
+        if (value.length > 0 && !/^[a-zA-Z0-9_]+$/.test(value)) {
+          errorMsg = "Only letters, numbers, and underscores allowed.";
+        } else if (value.length > 188) {
+          errorMsg = "Username is too long.";
+        }
+        break;
+
+      case "fullName":
+        setFullName(value);
+        if (value.length > 0 && value.length < 6) {
+          errorMsg = "Full name must be at least 6 characters.";
+        }
+        break;
+
+      case "email":
+        setEmail(value);
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (value.length > 0 && !emailRegex.test(value)) {
+          errorMsg = "Please enter a valid email address.";
+        }
+        break;
+
+      case "password":
+        setPassword(value);
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (value.length > 0 && !passwordRegex.test(value)) {
+          errorMsg = "Needs 8+ chars, 1 uppercase, 1 lowercase, 1 number.";
+        }
+        // cross‑check confirm password
+        if (confirmpassword && value !== confirmpassword) {
+          setErrors((prev) => ({ ...prev, confirmpassword: "Passwords do not match." }));
+        } else {
+          setErrors((prev) => ({ ...prev, confirmpassword: null }));
+        }
+        break;
+
+      case "confirmpassword":
+        setconfirmPassword(value);
+        if (value.length > 0 && value !== password) {
+          errorMsg = "Passwords do not match.";
+        }
+        break;
+
+      case "phoneNumber":
+        setPhoneNumber(value);
+        if (value.length > 0 && !/^[0-9+\-\s()]+$/.test(value)) {
+          errorMsg = "Contains invalid characters.";
+        } else if (value.length > 0 && value.length < 10) {
+          errorMsg = "Phone number is too short.";
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setErrors((prev) => ({ ...prev, [field]: errorMsg }));
+  };
+
   const handleRegister = async () => {
+    // Check if any errors exist before trying to submit
+    const hasErrors = Object.values(errors).some((err) => err !== null && err !== undefined);
+    if (hasErrors) {
+      Alert.alert("Validation Error", "Please fix the highlighted fields before submitting.");
+      return;
+    }
 
     const validateEmail = (email) => {
       return String(email)
@@ -123,38 +191,31 @@ export default function RegisterScreen({ navigation }) {
         .match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
     };
 
-
-
     if (!username || !fullName || !dob || !email || !password || !phoneNumber || !selectedClass || !parentName || !parentContact || !address) {
       Alert.alert("Missing Information", "Please fill in all required fields.");
       return;
     }
-
 
     if (username.length > 188) {
       Alert.alert("Invalid Username", "Username is too long.");
       return;
     }
 
-
     if (fullName.length < 6) {
       Alert.alert("Invalid Name", "Full name must be at least 6 characters.");
       return;
     }
-
 
     if (!validateEmail(email)) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
       return;
     }
 
-
     if (password.length < 8) {
       Alert.alert("Weak Password", "Password must be at least 8 characters long.");
       return;
     }
 
-    // ✅ Should also check complexity
     if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password)) {
       Alert.alert(
         "Weak Password",
@@ -163,12 +224,10 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
-
     if (password !== confirmpassword) {
       Alert.alert("Error", "Passwords do not match.");
       return;
     }
-
 
     if (phoneNumber.length < 10) {
       Alert.alert("Invalid Phone", "Please enter a valid phone number.");
@@ -176,7 +235,6 @@ export default function RegisterScreen({ navigation }) {
     }
 
     try {
-
       const response = await axios.post(
         "https://homeedu.fsdgroup.com.ng/api/AddStudent",
         {
@@ -199,7 +257,6 @@ export default function RegisterScreen({ navigation }) {
         routes: [{ name: "Login" }],
       });
     } catch (error) {
-
       const serverMessage = error.response?.data?.errors
         ? Object.values(error.response.data.errors).flat().join("\n")
         : "Registration failed. Please try again.";
@@ -215,19 +272,22 @@ export default function RegisterScreen({ navigation }) {
         return (
           <>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.username ? styles.inputError : null]}
               placeholder="Username"
               placeholderTextColor="#666666"
               value={username}
-              onChangeText={setUsername}
+              onChangeText={(val) => handleValidation("username", val)}
             />
+            {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.fullName ? styles.inputError : null]}
               placeholder="Full Name"
               placeholderTextColor="#666666"
               value={fullName}
-              onChangeText={setFullName}
+              onChangeText={(val) => handleValidation("fullName", val)}
             />
+            {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
 
             <Text style={styles.label}>Date of Birth:</Text>
 
@@ -257,21 +317,23 @@ export default function RegisterScreen({ navigation }) {
         return (
           <>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.email ? styles.inputError : null]}
               placeholder="Email"
               placeholderTextColor="#666666"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(val) => handleValidation("email", val)}
             />
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+
             {/* Password Field */}
-            <View style={styles.passwordContainer}>
+            <View style={[styles.passwordContainer, errors.password ? styles.inputError : null]}>
               <TextInput
                 style={styles.inputData}
                 placeholder="Password"
                 placeholderTextColor="#666666"
                 secureTextEntry={!showPassword}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(val) => handleValidation("password", val)}
               />
               <TouchableOpacity
                 onPress={() => setShowPassword(!showPassword)}
@@ -284,16 +346,17 @@ export default function RegisterScreen({ navigation }) {
                 />
               </TouchableOpacity>
             </View>
+            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
             {/* Confirm Password Field */}
-            <View style={styles.passwordContainer}>
+            <View style={[styles.passwordContainer, errors.confirmpassword ? styles.inputError : null]}>
               <TextInput
                 style={styles.inputData}
                 placeholder="Confirm Password"
                 placeholderTextColor="#666666"
                 secureTextEntry={!showConfirmPassword}
                 value={confirmpassword}
-                onChangeText={setconfirmPassword}
+                onChangeText={(val) => handleValidation("confirmpassword", val)}
               />
               <TouchableOpacity
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -306,19 +369,22 @@ export default function RegisterScreen({ navigation }) {
                 />
               </TouchableOpacity>
             </View>
+            {errors.confirmpassword && <Text style={styles.errorText}>{errors.confirmpassword}</Text>}
           </>
         );
       case 3:
         return (
           <>
             <TextInput
-              style={styles.input}
+              style={[styles.input, errors.phoneNumber ? styles.inputError : null]}
               placeholder="Phone Number"
               placeholderTextColor="#666666"
               keyboardType="phone-pad"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(val) => handleValidation("phoneNumber", val)}
             />
+            {errors.phoneNumber && <Text style={styles.errorText}>{errors.phoneNumber}</Text>}
+
             <Text style={styles.label}>Select Country</Text>
             <DropDownPicker
               open={open}
@@ -387,6 +453,7 @@ export default function RegisterScreen({ navigation }) {
         return null;
     }
   };
+
   return (
     <ImageBackground
       source={require("../assets/Rectangle_106.png")}
@@ -418,7 +485,6 @@ export default function RegisterScreen({ navigation }) {
                 </Text>
               </TouchableOpacity>
             ) : (
-
               <View style={{ flex: 1, marginHorizontal: 5 }} />
             )}
 
@@ -458,7 +524,6 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingLeft: 20,
     display: "flex",
-
     justifyContent: "center",
   },
   toptext: {
@@ -493,7 +558,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 5,
     borderColor: "white",
-    color: "white",
+    color: "black",
     backgroundColor: "#dddddd",
   },
   background: {
@@ -532,7 +597,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
   buttonOutline: {
     backgroundColor: "transparent",
@@ -597,16 +662,20 @@ const styles = StyleSheet.create({
     color: "black",
     fontSize: 14,
   },
-  input: {
-    borderWidth: 1,
-    marginBottom: 24,
-    padding: 10,
-    borderRadius: 5,
-    borderColor: "white",
-    color: "black",
-    backgroundColor: "#dddddd",
-  },
   icon: {
     paddingLeft: 5,
-  }
+  },
+  // --- NEW error styles ---
+  errorText: {
+    color: "#ff4d4d",
+    fontSize: 12,
+    marginTop: -20,      // pull text up closer to the input
+    marginBottom: 15,
+    marginLeft: 5,
+    fontWeight: "500",
+  },
+  inputError: {
+    borderColor: "#ff4d4d",
+    borderWidth: 1,
+  },
 });
